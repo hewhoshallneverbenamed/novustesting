@@ -1,0 +1,7 @@
+{
+    "domain": "sensor_pdf_generator",
+    "name": "Sensor PDF Generator",
+    "version": "1.0.0",
+    "config_flow": true,
+    "requirements": ["fpdf2==2.7.7"]
+}

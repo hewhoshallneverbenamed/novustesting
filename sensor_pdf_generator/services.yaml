@@ -1,0 +1,18 @@
+generate_pdf:
+  name: Generate PDF Report from Input Number
+  description: Generates a PDF report with the current value of a specified input_number helper.
+  fields:
+    input_number_entity_id: 
+      name: Input Number Entity ID
+      description: The entity ID of the input_number helper whose value should be included in the PDF (e.g., input_number.my_value).
+      required: true
+      selector:
+        entity:
+          domain: input_number 
+    filename:
+      name: Filename
+      description: The name of the PDF file to create (e.g., input_number_report.pdf). The file will be saved in the Home Assistant config directory.
+      required: false
+      default: sensor_report.pdf
+      selector:
+        text:
