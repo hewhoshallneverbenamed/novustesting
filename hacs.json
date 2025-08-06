@@ -1,0 +1,5 @@
+{
+  "name": "sensor_pdf_generation",
+  "homeassistant":"2025.7.1",
+  "render_readme": true
+} 
