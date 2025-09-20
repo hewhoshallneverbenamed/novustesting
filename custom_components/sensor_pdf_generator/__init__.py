@@ -15,6 +15,7 @@ from homeassistant.helpers.entity_registry import async_get, async_entries_for_c
 from homeassistant.helpers import entity_registry as er
 import arabic_reshaper
 from bidi.algorithm import get_display
+# import fitz  # PyMuPDF
 
 
 
@@ -89,7 +90,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         async_register_built_in_panel(
             hass,
             component_name="custom",
-            sidebar_title="PDF Generator",
+            sidebar_title="Receipt Generator",
             sidebar_icon="mdi:file-pdf-box",
             frontend_url_path="pdf-panel-frontend",
             config={
@@ -102,7 +103,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             },
             require_admin=False,
         )
-
+    # userhandler()
     _LOGGER.info("Sensor PDF Generator service registered successfully.")
     return True
 
@@ -149,8 +150,7 @@ async def _async_handle_generate_pdf_service(hass: HomeAssistant, call: ServiceC
             total_energy,
             energy_used,
             filename,
-            hass.config.config_dir,
-            energy_2days_ago
+            hass.config.config_dir
         )
         _LOGGER.info(f"PDF '{filename}' generated successfully in Home Assistant config directory.")
 
@@ -218,7 +218,7 @@ async def get_monthly_energy(hass, entity_id: str, year: int, month: int):
     monthly_energy = end_val - start_val
     return monthly_energy
 
-def generate_pdf_report(total_energy: float, energy_used: float, filename: str, config_dir: str, energy_2days_ago: float) -> None:
+def generate_pdf_report(total_energy: float, energy_used: float, filename: str, config_dir: str) -> None:
     """Generate a PDF report with English section at the top and Arabic section below using Amiri-Regular.ttf for Arabic."""
     from fpdf.enums import XPos, YPos
 
@@ -263,7 +263,6 @@ def generate_pdf_report(total_energy: float, energy_used: float, filename: str, 
         "Period:",
         "Total Energy (kW):",
         "Energy Used (kWh):",
-        "Energy 2 Days Ago:",
         "Counter Cost:",
         "Cost per KW:",
         "Total Cost:",
@@ -274,7 +273,6 @@ def generate_pdf_report(total_energy: float, energy_used: float, filename: str, 
         date_range,
         f"{total_energy:.2f}",
         f"{energy_used:.2f}",
-        f"{energy_2days_ago:.2f}",
         f"{counter_cost:,}",
         f"{cost_multiplier:,}",
         f"{total_cost:,}",
@@ -297,15 +295,14 @@ def generate_pdf_report(total_energy: float, energy_used: float, filename: str, 
     pdf.cell(page_width, 7, "-" * (int(page_width // 7)), align="C", ln=1)
 
     arabic_labels = [
-        "التقرير معرف",
+        "معرف التقرير",
         "التاريخ",
         "الفترة",
-        "الطاقة جمالي (ك.و)",
-        "المستخدمة الطاقة (ك.و.س)",
-        "يومين قبل الطاقة",
-        "العداد تكلفة",
-        "ك.و كل تكلفة",
-        "الإجمالية التكلفة",
+        "اجمالي الطاقة (ك.و)",
+        "الطاقة المستخدمة (ك.و.س) ",
+        " تكلفة العداد ",
+        " تكلفة كل ك.و ",
+        " التكلفة الإجمالية ",
     ]
     arabic_values = english_values  # same values, just different labels
 
@@ -321,9 +318,9 @@ def generate_pdf_report(total_energy: float, energy_used: float, filename: str, 
 
     pdf.cell(page_width, 7, "-" * (int(page_width // 7)), align="C", ln=1)
 
-    pdf_output_path = os.path.join(config_dir, filename)
+    # Change output directory to /config/media/receipts/
+    receipts_dir = os.path.join(config_dir, "www", "receipts")
+    os.makedirs(receipts_dir, exist_ok=True)
+    pdf_output_path = os.path.join(receipts_dir, filename)
     pdf.output(pdf_output_path)
-    pdf_output_path = os.path.join(config_dir, filename)
-    pdf.output(pdf_output_path)
-    pdf_output_path = os.path.join(config_dir, filename)
-    pdf.output(pdf_output_path)
+
