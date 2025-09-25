@@ -1,365 +1,3 @@
-// class PdfGeneratorPanel extends HTMLElement {
-//   constructor() {
-//     super();
-//     this.attachShadow({ mode: "open" });
-//     this.users = [];
-//     this.filteredUsers = [];
-//     this.selectedUser = null;
-//     this._pdfs = [];
-//   }
-
-//   connectedCallback() {
-//     this.shadowRoot.innerHTML = `
-//       <style>
-//         :host {
-//           display: flex;
-//           flex-direction: row;
-//           height: 100%;
-//           font-family: Arial, sans-serif;
-//         }
-
-//         .left, .right {
-//           padding: 20px;
-//         }
-
-//         .left {
-//           flex: 1;
-//           border-right: 1px solid #ddd;
-//           overflow-y: auto; /* Enable scrolling for left panel */
-//           max-height: 100vh;
-//         }
-
-//         .right {
-//           flex: 1;
-//           display: flex;
-//           flex-direction: column;
-//           gap: 15px;
-//         }
-
-//         button {
-//           padding: 10px 18px;
-//           font-size: 16px;
-//           cursor: pointer;
-//           border-radius: 8px;
-//           border: none;
-//           background: #03a9f4;
-//           color: white;
-//           transition: background 0.2s;
-//         }
-//         button:hover {
-//           background: #0288d1;
-//         }
-
-//         #status {
-//           margin-top: 12px;
-//           font-size: 14px;
-//         }
-
-//         .card {
-//           border: 1px solid #ccc;
-//           border-radius: 8px;
-//           padding: 15px;
-//           box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-//         }
-
-//         .card h2 {
-//           margin-top: 0;
-//           font-size: 18px;
-//         }
-
-//         .stat {
-//           display: flex;
-//           justify-content: space-between;
-//           margin: 6px 0;
-//         }
-//         .stat span:first-child {
-//           font-weight: bold;
-//         }
-
-//         /* Additional styles for user list */
-//         #user-list {
-//           list-style-type: none;
-//           padding: 0;
-//           margin: 0;
-//           max-height: 60vh;
-//           overflow-y: auto; /* Enable scrolling for user list */
-//         }
-//         #user-list li {
-//           padding: 8px;
-//           border-radius: 4px;
-//           border: 2px solid transparent;
-//           transition: border 0.2s, color 0.2s;
-//           color: #fff;            /* White text */
-//           font-weight: bold;      /* Bold text */
-//         }
-//         #user-list li:hover {
-//           background: #f0f0f0;
-//           color: #000; /* Black text on hover */
-//         }
-//         #user-list li.selected {
-//           border: 2px solid #2196f3; /* Blue border for selected */
-//           background: #e3f2fd;
-//           color: #1976d2;
-//         }
-
-//         /* Hide the original content */
-//         .original-content {
-//           display: none;
-//         }
-//       </style>
-
-//       <div class="left">
-//         <h1>Receipt Generator</h1>
-//         <input id="search" type="text" placeholder="Search users..." />
-//         <ul id="user-list"></ul>
-//         <button id="generate" disabled>Generate Receipt</button>
-//         <div id="status"></div>
-//       </div>
-
-//       <div class="right">
-//         <div class="card">
-//           <h2 id="stats-title">Current Stats</h2>
-//           <div class="stat"><span>Phase A Current:</span><span id="stat-phase-a-current">-</span></div>
-//           <div class="stat"><span>Phase A Power:</span><span id="stat-phase-a-power">-</span></div>
-//           <div class="stat"><span>Phase A Voltage:</span><span id="stat-phase-a-voltage">-</span></div>
-//           <div class="stat"><span>Temperature:</span><span id="stat-temperature">-</span></div>
-//           <div class="stat"><span>Total Energy:</span><span id="stat-total-energy">-</span></div>
-//         </div>
-
-//         <div class="card">
-//           <h2>Generated PDFs</h2>
-//           <ul id="pdf-list-ul">
-//             <li>Loading...</li>
-//           </ul>
-//         </div>
-//       </div>
-
-//       <!-- Original content, hidden by default -->
-//       <div class="original-content">
-//         <div class="left">
-//           <h1>Receipt Generator</h1>
-//           <button id="generate">Generate Receipt</button>
-//           <div id="status"></div>
-//         </div>
-
-//         <div class="right">
-//           <div class="card">
-//             <h2>Current Stats</h2>
-//             <div class="stat"><span>Total Energy:</span><span id="stat-energy">-</span></div>
-//             <div class="stat"><span>Power:</span><span id="stat-power">-</span></div>
-//             <div class="stat"><span>Current:</span><span id="stat-current">-</span></div>
-//           </div>
-//         </div>
-//       </div>
-//     `;
-
-//     this.shadowRoot.getElementById("search").addEventListener("input", (e) => {
-//       this._filterUsers(e.target.value);
-//     });
-//     this.shadowRoot.getElementById("generate").addEventListener("click", () => this._generate());
-//     this._renderUserList();
-//     this._updateStats();
-//     this._loadPdfList();
-//   }
-
-//   set hass(hass) {
-//     this._hass = hass;
-//     this._getUsersFromHass();
-//     this._updateStats();
-//     this._loadPdfList();
-//   }
-
-//   get hass() {
-//     return this._hass;
-//   }
-
-//   _getUsersFromHass() {
-//     console.debug("Enumerating hass.states to build users…");
-//     if (!this._hass) return [];
-  
-//     const sensorTypes = [
-//       "phase_a_current",
-//       "phase_a_power",
-//       "phase_a_voltage",
-//       "temperature",
-//       "total_energy"
-//     ];
-  
-//     const breakers = {};  // map: baseName -> Set of detected sensorTypes
-  
-//     Object.keys(this._hass.states).forEach(entityId => {
-//       if (!entityId.startsWith("sensor.")) return;
-  
-//       const lower = entityId.toLowerCase();
-  
-//       // Check each sensorType if entityId ends with that type
-//       sensorTypes.forEach(type => {
-//         if (lower.endsWith(`_${type}`)) {
-//           // get the baseName
-//           // remove the "sensor." prefix
-//           const withoutSensor = entityId.substring("sensor.".length);
-//           // remove the `_${type}` suffix
-//           const baseName = withoutSensor.substring(0, withoutSensor.length - (`_${type}`).length);
-//           // initialize if needed
-//           if (!breakers[baseName]) {
-//             breakers[baseName] = new Set();
-//           }
-//           breakers[baseName].add(type);
-//         }
-//       });
-//     });
-  
-//     console.info("Breakers detected:", breakers);
-  
-//     // Build user objects
-//     const users = Object.entries(breakers).map(([baseName, typesSet]) => {
-//       // optionally FILTER: only include baseName if it has at least one important sensor
-//       // For example, require phase_a_current and total_energy
-//       if (!typesSet.has("phase_a_current") || !typesSet.has("total_energy")) return null;
-  
-//       // Construct sensors map, only for types present (or for all if you want to include all)
-//       const sensors = {};
-//       sensorTypes.forEach(type => {
-//         if (typesSet.has(type)) {
-//           sensors[type] = `sensor.${baseName}_${type}`;
-//         }
-//       });
-  
-//       return {
-//         name: baseName,
-//         sensors
-//       };
-//     }).filter(u => u !== null);
-  
-//     console.info("Users list built:", users);
-//     return users;  
-  
-//     // Build user objects for each breaker
-//     // return Array.from(breakerNames).map(name => ({
-//     //   name,
-//     //   sensors: {
-//     //     phase_a_current: `sensor.${name}_phase_a_current`,
-//     //     phase_a_power: `sensor.${name}_phase_a_power`,
-//     //     phase_a_voltage: `sensor.${name}_phase_a_voltage`,
-//     //     temperature: `sensor.${name}_temperature`,
-//     //     total_energy: `sensor.${name}_total_energy`
-//     //   }
-//     // }));
-//   }
-
-//   _filterUsers(query) {
-//     console.debug("Filtering users with query:", query);
-//     query = query.toLowerCase();
-//     this.filteredUsers = this.users.filter(u => u.name.toLowerCase().includes(query));
-//     this._renderUserList();
-//   }
-
-//   _renderUserList() {
-//     console.debug("Rendering user list. Selected user:", this.selectedUser);
-//     const ul = this.shadowRoot.getElementById("user-list");
-//     ul.innerHTML = "";
-//     this.filteredUsers.forEach(user => {
-//       const li = document.createElement("li");
-//       li.textContent = user.name;
-//       li.style.cursor = "pointer";
-//       if (this.selectedUser && this.selectedUser.name === user.name) {
-//         li.classList.add("selected");
-//       }
-//       li.onclick = () => {
-//         this.selectedUser = user;
-//         this._updateStats();
-//         this.shadowRoot.getElementById("generate").disabled = false;
-//         this._renderUserList(); // re-render to update selection
-//       };
-//       ul.appendChild(li);
-//     });
-//     if (!this.selectedUser) {
-//       this.shadowRoot.getElementById("generate").disabled = true;
-//     }
-//   }
-
-//   _updateStats() {
-//     const statsTitle = this.shadowRoot.getElementById("stats-title");
-//     if (!this._hass || !this.selectedUser) {
-//       statsTitle.textContent = "Current Stats";
-//       this.shadowRoot.getElementById("stat-phase-a-current").textContent = "-";
-//       this.shadowRoot.getElementById("stat-phase-a-power").textContent = "-";
-//       this.shadowRoot.getElementById("stat-phase-a-voltage").textContent = "-";
-//       this.shadowRoot.getElementById("stat-temperature").textContent = "-";
-//       this.shadowRoot.getElementById("stat-total-energy").textContent = "-";
-//       return;
-//     }
-//     statsTitle.textContent = `${this.selectedUser.name} Current Stats`;
-//     const sensors = this.selectedUser.sensors;
-//     this.shadowRoot.getElementById("stat-phase-a-current").textContent =
-//       this._hass.states[sensors.phase_a_current]?.state ?? "-";
-//     this.shadowRoot.getElementById("stat-phase-a-power").textContent =
-//       this._hass.states[sensors.phase_a_power]?.state ?? "-";
-//     this.shadowRoot.getElementById("stat-phase-a-voltage").textContent =
-//       this._hass.states[sensors.phase_a_voltage]?.state ?? "-";
-//     this.shadowRoot.getElementById("stat-temperature").textContent =
-//       this._hass.states[sensors.temperature]?.state ?? "-";
-//     this.shadowRoot.getElementById("stat-total-energy").textContent =
-//       this._hass.states[sensors.total_energy]?.state ?? "-";
-//   }
-
-//   async _generate() {
-//     const status = this.shadowRoot.getElementById("status");
-//     if (!this.selectedUser) return;
-//     status.textContent = "Generating PDF...";
-//     const today = new Date().toISOString().slice(0, 10);
-//     const filename = `${this.selectedUser.name}_${today}.pdf`;
-//     const totalEnergy = this.selectedUser.sensors.total_energy;
-//     console.log(totalEnergy)
-//     try {
-//       await this.hass.callService(
-//         "sensor_pdf_generator",
-//         "generate_pdf",
-//         {
-//           total_energy_entity_id: totalEnergy,
-//           filename
-//         }
-//       );
-//       status.textContent = `✅ PDF Generated: ${filename}`;
-//     } catch (err) {
-//       console.error("Service call failed:", err);
-//       status.textContent = "❌ Error generating PDF";
-//     }
-//     setTimeout(() => this._loadPdfList(), 2000); // Reload list after generation
-//   }
-
-//   async _loadPdfList() {
-//     // Load list.json from /local/receipts/
-//     const ul = this.shadowRoot.getElementById("pdf-list-ul");
-//     if (!ul) return;
-//     ul.innerHTML = "<li>Loading...</li>";
-//     try {
-//       const resp = await fetch("/local/receipts/list.json");
-//       if (!resp.ok) throw new Error("No list.json found");
-//       const files = await resp.json();
-//       ul.innerHTML = "";
-//       files.forEach(file => {
-//         if (file.endsWith(".pdf")) {
-//           const li = document.createElement("li");
-//           const a = document.createElement("a");
-//           a.href = `/local/receipts/${file}`;
-//           a.textContent = file;
-//           a.className = "pdf-link";
-//           a.target = "_blank";
-//           li.appendChild(a);
-//           ul.appendChild(li);
-//         }
-//       });
-//       if (ul.children.length === 0) ul.innerHTML = "<li>No receipts found.</li>";
-//     } catch (e) {
-//       ul.innerHTML = "<li>Could not load receipts list. Please add a list.json file in /config/www/receipts/.</li>";
-//     }
-//   }
-// }
-
-// customElements.define("pdf-generator-panel", PdfGeneratorPanel);
-
-
 class PdfGeneratorPanel extends HTMLElement {
   constructor() {
     super();
@@ -369,143 +7,447 @@ class PdfGeneratorPanel extends HTMLElement {
     this.selectedUser = null;
     this.shadowRoot.innerHTML = `
       <style>
+        * {
+          box-sizing: border-box;
+        }
+
         :host {
+          --ha-primary-color: #03a9f4;
+          --ha-primary-dark: #0288d1;
+          --ha-success-color: #4caf50;
+          --ha-error-color: #f44336;
+          --ha-warning-color: #ff9800;
+          
+          /* Light theme defaults */
+          --bg-primary: #fafafa;
+          --bg-secondary: #ffffff;
+          --bg-tertiary: #f5f5f5;
+          --text-primary: #212121;
+          --text-secondary: #757575;
+          --text-tertiary: #9e9e9e;
+          --border-color: #e0e0e0;
+          --shadow-light: rgba(0, 0, 0, 0.05);
+          --shadow-medium: rgba(0, 0, 0, 0.1);
+          --shadow-heavy: rgba(0, 0, 0, 0.15);
+          
           display: flex;
-          flex-direction: row;
-          height: 100%;
-          font-family: Arial, sans-serif;
+          height: 100vh;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+          background: var(--bg-primary);
+          color: var(--text-primary);
+          overflow: hidden;
         }
 
-        .left, .right {
-          padding: 20px;
+        /* Dark theme */
+        @media (prefers-color-scheme: dark) {
+          :host {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --text-primary: #f0f6fc;
+            --text-secondary: #8b949e;
+            --text-tertiary: #656d76;
+            --border-color: #30363d;
+            --shadow-light: rgba(0, 0, 0, 0.3);
+            --shadow-medium: rgba(0, 0, 0, 0.5);
+            --shadow-heavy: rgba(0, 0, 0, 0.7);
+          }
         }
 
-        .left {
-          flex: 1;
-          border-right: 1px solid #ddd;
-          overflow-y: auto; /* Enable scrolling for left panel */
-          max-height: 100vh;
+        /* Layout */
+        .sidebar {
+          width: 400px;
+          background: var(--bg-secondary);
+          border-right: 1px solid var(--border-color);
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
         }
 
-        .right {
+        .main-content {
           flex: 1;
           display: flex;
           flex-direction: column;
-          gap: 15px;
+          gap: 24px;
+          padding: 24px;
+          overflow-y: auto;
         }
 
-        button {
-          padding: 10px 18px;
-          font-size: 16px;
+        /* Sidebar Header */
+        .sidebar-header {
+          padding: 24px;
+          border-bottom: 1px solid var(--border-color);
+          background: var(--bg-secondary);
+        }
+
+        .sidebar-header h1 {
+          margin: 0 0 16px 0;
+          font-size: 24px;
+          font-weight: 600;
+          color: var(--text-primary);
+          letter-spacing: -0.02em;
+        }
+
+        /* Search Input */
+        .search-container {
+          position: relative;
+        }
+
+        .search-input {
+          width: 100%;
+          padding: 12px 16px 12px 44px;
+          border: 2px solid var(--border-color);
+          border-radius: 12px;
+          background: var(--bg-tertiary);
+          color: var(--text-primary);
+          font-size: 14px;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .search-input:focus {
+          outline: none;
+          border-color: var(--ha-primary-color);
+          background: var(--bg-secondary);
+          box-shadow: 0 0 0 4px rgba(3, 169, 244, 0.1);
+        }
+
+        .search-input::placeholder {
+          color: var(--text-tertiary);
+        }
+
+        .search-icon {
+          position: absolute;
+          left: 14px;
+          top: 50%;
+          transform: translateY(-50%);
+          color: var(--text-tertiary);
+          pointer-events: none;
+        }
+
+        /* User List */
+        .user-list-container {
+          flex: 1;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .user-list {
+          flex: 1;
+          overflow-y: auto;
+          padding: 0 16px;
+          margin: 0;
+          list-style: none;
+        }
+
+        .user-item {
+          padding: 14px 16px;
+          margin: 6px 0;
+          border-radius: 10px;
           cursor: pointer;
-          border-radius: 8px;
-          border: none;
-          background: #03a9f4;
-          color: white;
-          transition: background 0.2s;
-        }
-        button:hover {
-          background: #0288d1;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          background: transparent;
+          color: var(--text-primary);
+          font-weight: 500;
+          border: 2px solid transparent;
+          position: relative;
+          overflow: hidden;
         }
 
-        #status {
+        .user-item::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: var(--ha-primary-color);
+          opacity: 0;
+          transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          z-index: -1;
+        }
+
+        .user-item:hover {
+          background: var(--bg-tertiary);
+          transform: translateX(4px);
+        }
+
+        .user-item.selected {
+          background: rgba(3, 169, 244, 0.08);
+          border-color: var(--ha-primary-color);
+          color: var(--ha-primary-color);
+          transform: translateX(6px);
+        }
+
+        .user-item.selected::before {
+          opacity: 0.05;
+        }
+
+        /* Generate Button */
+        .generate-section {
+          padding: 16px 24px 24px;
+          border-top: 1px solid var(--border-color);
+        }
+
+        .generate-btn {
+          width: 100%;
+          padding: 16px 24px;
+          background: var(--ha-primary-color);
+          color: white;
+          border: none;
+          border-radius: 12px;
+          font-size: 16px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          position: relative;
+          overflow: hidden;
+        }
+
+        .generate-btn:hover:not(:disabled) {
+          background: var(--ha-primary-dark);
+          transform: translateY(-2px);
+          box-shadow: 0 8px 25px rgba(3, 169, 244, 0.3);
+        }
+
+        .generate-btn:active:not(:disabled) {
+          transform: translateY(-1px);
+        }
+
+        .generate-btn:disabled {
+          background: var(--text-tertiary);
+          cursor: not-allowed;
+          transform: none;
+          box-shadow: none;
+          opacity: 0.6;
+        }
+
+        .status-message {
           margin-top: 12px;
+          padding: 8px 12px;
+          border-radius: 8px;
+          font-size: 14px;
+          text-align: center;
+          font-weight: 500;
+          min-height: 20px;
+        }
+
+        .status-message.success {
+          background: rgba(76, 175, 80, 0.1);
+          color: var(--ha-success-color);
+          border: 1px solid rgba(76, 175, 80, 0.2);
+        }
+
+        .status-message.error {
+          background: rgba(244, 67, 54, 0.1);
+          color: var(--ha-error-color);
+          border: 1px solid rgba(244, 67, 54, 0.2);
+        }
+
+        .status-message.loading {
+          background: rgba(3, 169, 244, 0.1);
+          color: var(--ha-primary-color);
+          border: 1px solid rgba(3, 169, 244, 0.2);
+        }
+
+        /* Cards */
+        .card {
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-color);
+          border-radius: 16px;
+          padding: 24px;
+          box-shadow: 0 2px 8px var(--shadow-light);
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .card:hover {
+          box-shadow: 0 8px 24px var(--shadow-medium);
+          transform: translateY(-2px);
+        }
+
+        .card-title {
+          margin: 0 0 20px 0;
+          font-size: 20px;
+          font-weight: 600;
+          color: var(--text-primary);
+          letter-spacing: -0.01em;
+        }
+
+        /* Stats */
+        .stats-grid {
+          display: grid;
+          gap: 16px;
+        }
+
+        .stat-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 16px 0;
+          border-bottom: 1px solid var(--border-color);
+        }
+
+        .stat-item:last-child {
+          border-bottom: none;
+        }
+
+        .stat-label {
+          font-weight: 500;
+          color: var(--text-secondary);
           font-size: 14px;
         }
 
-        .card {
-          border: 1px solid #ccc;
-          border-radius: 8px;
-          padding: 15px;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        .stat-value {
+          font-weight: 700;
+          color: var(--text-primary);
+          font-size: 16px;
+          font-variant-numeric: tabular-nums;
         }
 
-        .card h2 {
-          margin-top: 0;
-          font-size: 18px;
-        }
-
-        .stat {
-          display: flex;
-          justify-content: space-between;
-          margin: 6px 0;
-        }
-        .stat span:first-child {
-          font-weight: bold;
-        }
-
-        /* Additional styles for user list */
-        #user-list {
-          list-style-type: none;
+        /* PDF List */
+        .pdf-list {
+          list-style: none;
           padding: 0;
           margin: 0;
-          max-height: 60vh;
-          overflow-y: auto; /* Enable scrolling for user list */
-        }
-        #user-list li {
-          padding: 8px;
-          border-radius: 4px;
-          border: 2px solid transparent;
-          transition: border 0.2s, color 0.2s;
-          color: #fff;            /* White text */
-          font-weight: bold;      /* Bold text */
-        }
-        #user-list li:hover {
-          background: #f0f0f0;
-          color: #000; /* Black text on hover */
-        }
-        #user-list li.selected {
-          border: 2px solid #2196f3; /* Blue border for selected */
-          background: #e3f2fd;
-          color: #1976d2;
+          max-height: 300px;
+          overflow-y: auto;
         }
 
-        /* Hide the original content */
+        .pdf-item {
+          padding: 12px 16px;
+          margin: 8px 0;
+          background: var(--bg-tertiary);
+          border-radius: 8px;
+          color: var(--text-secondary);
+          font-size: 14px;
+          font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .pdf-item:hover {
+          background: var(--bg-secondary);
+          color: var(--text-primary);
+          transform: translateX(4px);
+        }
+
+        /* Scrollbars */
+        .user-list::-webkit-scrollbar,
+        .pdf-list::-webkit-scrollbar,
+        .main-content::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .user-list::-webkit-scrollbar-track,
+        .pdf-list::-webkit-scrollbar-track,
+        .main-content::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        .user-list::-webkit-scrollbar-thumb,
+        .pdf-list::-webkit-scrollbar-thumb,
+        .main-content::-webkit-scrollbar-thumb {
+          background: var(--border-color);
+          border-radius: 3px;
+        }
+
+        .user-list::-webkit-scrollbar-thumb:hover,
+        .pdf-list::-webkit-scrollbar-thumb:hover,
+        .main-content::-webkit-scrollbar-thumb:hover {
+          background: var(--text-tertiary);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+          :host {
+            flex-direction: column;
+          }
+
+          .sidebar {
+            width: 100%;
+            max-height: 50vh;
+          }
+
+          .main-content {
+            padding: 16px;
+          }
+
+          .card {
+            padding: 20px;
+          }
+        }
+
+        /* Loading animation */
+        .loading {
+          animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+
+        /* Icons */
+        .icon {
+          width: 20px;
+          height: 20px;
+        }
+
+        /* Hide original content */
         .original-content {
           display: none;
         }
       </style>
 
-      <div class="left">
-        <h1>PDF Generator</h1>
-        <input id="search" type="text" placeholder="Search users..." />
-        <ul id="user-list"></ul>
-        <button id="generate" disabled>Generate PDF</button>
-        <div id="status"></div>
-      </div>
-
-      <div class="right">
-        <div class="card">
-          <h2 id="stats-title">Current Stats</h2>
-          <div class="stat"><span>Phase A Current:</span><span id="stat-phase-a-current">-</span></div>
-          <div class="stat"><span>Phase A Power:</span><span id="stat-phase-a-power">-</span></div>
-          <div class="stat"><span>Phase A Voltage:</span><span id="stat-phase-a-voltage">-</span></div>
-          <div class="stat"><span>Temperature:</span><span id="stat-temperature">-</span></div>
-          <div class="stat"><span>Total Energy:</span><span id="stat-total-energy">-</span></div>
-        </div>
-        <div class="card">
-          <h2>Generated PDFs</h2>
-          <ul id="pdf-list-ul">
-            <li>Loading...</li>
-          </ul>
-        </div>
-      </div>
-
-      <!-- Original content, hidden by default -->
-      <div class="original-content">
-        <div class="left">
-          <h1>PDF Generator</h1>
-          <button id="generate">Generate PDF</button>
-          <div id="status"></div>
-        </div>
-
-        <div class="right">
-          <div class="card">
-            <h2>Current Stats</h2>
-            <div class="stat"><span>Total Energy:</span><span id="stat-energy">-</span></div>
-            <div class="stat"><span>Power:</span><span id="stat-power">-</span></div>
-            <div class="stat"><span>Current:</span><span id="stat-current">-</span></div>
+      <div class="sidebar">
+        <div class="sidebar-header">
+          <h1>Receipt Generator</h1>
+          <div class="search-container">
+            <svg class="search-icon icon" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+            </svg>
+            <input id="search" class="search-input" type="text" placeholder="Search users..." />
           </div>
+        </div>
+        
+        <div class="user-list-container">
+          <ul id="user-list" class="user-list"></ul>
+        </div>
+        
+        <div class="generate-section">
+          <button id="generate" class="generate-btn" disabled>Generate Receipt</button>
+          <div id="status" class="status-message"></div>
+        </div>
+      </div>
+
+      <div class="main-content">
+        <div class="card">
+          <h2 id="stats-title" class="card-title">Select a User</h2>
+          <div class="stats-grid">
+            <div class="stat-item">
+              <span class="stat-label">Phase A Current</span>
+              <span id="stat-phase-a-current" class="stat-value">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Phase A Power</span>
+              <span id="stat-phase-a-power" class="stat-value">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Phase A Voltage</span>
+              <span id="stat-phase-a-voltage" class="stat-value">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Temperature</span>
+              <span id="stat-temperature" class="stat-value">-</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Total Energy</span>
+              <span id="stat-total-energy" class="stat-value">-</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="card">
+          <h2 class="card-title">Generated Reports</h2>
+          <ul id="pdf-list-ul" class="pdf-list">
+            <li class="pdf-item loading">Loading reports...</li>
+          </ul>
         </div>
       </div>
     `;
