@@ -522,12 +522,21 @@ class PdfGeneratorPanel extends HTMLElement {
           sensors[type] = `sensor.${baseName}_${type}`;
         }
       });
-  
+      const primaryEntityId =
+        sensors.phase_a_current ??
+        sensors.total_energy ??
+        Object.values(sensors)[0];
+      const stateObj = primaryEntityId ? this._hass.states[primaryEntityId] : null;
+      const displayName =
+        stateObj?.name ??
+        stateObj?.attributes?.friendly_name ??
+        baseName;
       return {
         name: baseName,
+        displayName,
         sensors
       };
-    }).filter(u => u !== null);  
+    }).filter(u => u !== null);
     return users;  
   
   }
@@ -543,7 +552,7 @@ class PdfGeneratorPanel extends HTMLElement {
     ul.innerHTML = "";
     this.filteredUsers.forEach(user => {
       const li = document.createElement("li");
-      li.textContent = user.name;
+      li.textContent = user.displayName || user.name;
       li.style.cursor = "pointer";
       if (this.selectedUser && this.selectedUser.name === user.name) {
         li.classList.add("selected");
@@ -572,7 +581,7 @@ class PdfGeneratorPanel extends HTMLElement {
       this.shadowRoot.getElementById("stat-total-energy").textContent = "-";
       return;
     }
-    statsTitle.textContent = `${this.selectedUser.name} Current Stats`;
+    statsTitle.textContent = `${(this.selectedUser.displayName || this.selectedUser.name)} Current Stats`;
     const sensors = this.selectedUser.sensors;
     this.shadowRoot.getElementById("stat-phase-a-current").textContent =
       this._hass.states[sensors.phase_a_current]?.state ?? "-";
