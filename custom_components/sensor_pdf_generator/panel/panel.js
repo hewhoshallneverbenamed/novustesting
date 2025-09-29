@@ -473,10 +473,32 @@ class PdfGeneratorPanel extends HTMLElement {
   get hass() {
     return this._hass;
   }
-  
+
+  _stripSuffix(value, suffix) {
+    if (!value || !suffix) return value;
+    return value.endsWith(suffix) ? value.slice(0, -suffix.length) : value;
+  }
+
+  _sanitizeDisplayName(name) {
+    if (!name) return "";
+    let result = name.trim();
+    [
+      /phase a current$/i,
+      /phase a power$/i,
+      /phase a voltage$/i,
+      /temperature$/i,
+      /total energy$/i,
+      /switch$/i
+    ].forEach(pattern => {
+      result = result.replace(pattern, "").trim();
+    });
+    result = result.replace(/\s{2,}/g, " ").trim();
+    return result || name.trim();
+  }
+
   _getUsersFromHass() {
     if (!this._hass) return [];
-  
+
     const sensorTypes = [
       "phase_a_current",
       "phase_a_power",
@@ -484,66 +506,64 @@ class PdfGeneratorPanel extends HTMLElement {
       "temperature",
       "total_energy"
     ];
-  
-    const breakers = {};  // map: baseName -> Set of detected sensorTypes
-  
+
+    const usersByBase = new Map();
+
+    Object.entries(this._hass.states).forEach(([entityId, stateObj]) => {
+      if (!entityId.startsWith("switch.")) return;
+      const objectId = entityId.substring("switch.".length);
+      const baseName = this._stripSuffix(objectId, "_switch");
+      const entry = usersByBase.get(baseName) ?? {
+        name: baseName,
+        displayName: "",
+        sensors: {},
+        switchEntityId: entityId
+      };
+      entry.switchEntityId = entityId;
+      if (!entry.displayName) {
+        entry.displayName = this._sanitizeDisplayName(
+          stateObj?.attributes?.friendly_name ?? baseName
+        );
+      }
+      usersByBase.set(baseName, entry);
+    });
+
     Object.keys(this._hass.states).forEach(entityId => {
       if (!entityId.startsWith("sensor.")) return;
-  
-      const lower = entityId.toLowerCase();
-  
-      // Check each sensorType if entityId ends with that type
+      const objectId = entityId.substring("sensor.".length);
       sensorTypes.forEach(type => {
-        if (lower.endsWith(`_${type}`)) {
-          // get the baseName
-          // remove the "sensor." prefix
-          const withoutSensor = entityId.substring("sensor.".length);
-          // remove the `_${type}` suffix
-          const baseName = withoutSensor.substring(0, withoutSensor.length - (`_${type}`).length);
-          // initialize if needed
-          if (!breakers[baseName]) {
-            breakers[baseName] = new Set();
-          }
-          breakers[baseName].add(type);
+        if (!objectId.endsWith(`_${type}`)) return;
+        const baseCandidate = objectId.slice(0, -(`_${type}`).length);
+        const baseName = this._stripSuffix(baseCandidate, "_switch");
+        const entry = usersByBase.get(baseName);
+        if (!entry) return;
+        entry.sensors[type] = entityId;
+        if (!entry.displayName) {
+          const friendly =
+            this._hass.states[entityId]?.attributes?.friendly_name ?? baseName;
+          entry.displayName = this._sanitizeDisplayName(friendly);
         }
       });
     });
-    
-    // Build user objects
-    const users = Object.entries(breakers).map(([baseName, typesSet]) => {
-      // optionally FILTER: only include baseName if it has at least one important sensor
-      // For example, require phase_a_current and total_energy
-      if (!typesSet.has("phase_a_current") || !typesSet.has("total_energy")) return null;
-  
-      // Construct sensors map, only for types present (or for all if you want to include all)
-      const sensors = {};
-      sensorTypes.forEach(type => {
-        if (typesSet.has(type)) {
-          sensors[type] = `sensor.${baseName}_${type}`;
-        }
-      });
-      const primaryEntityId =
-        sensors.phase_a_current ??
-        sensors.total_energy ??
-        Object.values(sensors)[0];
-      const stateObj = primaryEntityId ? this._hass.states[primaryEntityId] : null;
-      const displayName =
-        stateObj?.name ??
-        stateObj?.attributes?.friendly_name ??
-        baseName;
-      return {
-        name: baseName,
-        displayName,
-        sensors
-      };
-    }).filter(u => u !== null);
-    return users;  
-  
+
+    return Array.from(usersByBase.values())
+      .filter(entry => entry.sensors.total_energy)
+      .map(entry => ({
+        ...entry,
+        displayName: entry.displayName || this._sanitizeDisplayName(entry.name)
+      }));
   }
 
   _filterUsers(query) {
-    query = query.toLowerCase();
-    this.filteredUsers = this.users.filter(u => u.name.toLowerCase().includes(query));
+    const normalized = (query || "").toLowerCase();
+    if (!normalized) {
+      this.filteredUsers = this.users;
+    } else {
+      this.filteredUsers = this.users.filter(user =>
+        user.name.toLowerCase().includes(normalized) ||
+        user.switchEntityId?.toLowerCase().includes(normalized)
+      );
+    }
     this._renderUserList();
   }
 
