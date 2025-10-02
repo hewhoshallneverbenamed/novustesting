@@ -36,6 +36,10 @@ SERVICE_GENERATE_PDF_SCHEMA = vol.Schema({
     vol.Optional("filename", default="sensor_report.pdf"): str,
 })
 
+# Add this after the existing SERVICE_GENERATE_PDF_SCHEMA
+SERVICE_LIST_PDFS = "list_pdfs"
+SERVICE_LIST_PDFS_SCHEMA = vol.Schema({})
+
 # Add a global cache for the timezone object
 _TZ_CACHE = {}
 
@@ -68,16 +72,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _LOGGER.debug("async_setup_entry called for Sensor PDF Generator.")
 
     # Register the PDF generation service
-    # This logic is moved here from async_setup because it's tied to the config entry.
     async def handle_generate_pdf_service(call: ServiceCall) -> None:
         """Wrapper to properly handle the async service call."""
         await _async_handle_generate_pdf_service(hass, call)
+
+    # Register the list PDFs service
+    async def handle_list_pdfs_service(call: ServiceCall) -> dict:
+        """Handle the list_pdfs service call."""
+        return await _async_handle_list_pdfs_service(hass, call)
 
     hass.services.async_register(
         DOMAIN,
         SERVICE_GENERATE_PDF,
         handle_generate_pdf_service,
         schema=SERVICE_GENERATE_PDF_SCHEMA,
+    )
+    
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_LIST_PDFS,
+        handle_list_pdfs_service,
+        schema=SERVICE_LIST_PDFS_SCHEMA,
+        supports_response=True,
     )
     
     # Register the panel in sidebar
@@ -110,9 +126,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     _LOGGER.debug("async_unload_entry called for Sensor PDF Generator.")
-    # Unregister the service when the integration is unloaded
+    # Unregister the services when the integration is unloaded
     hass.services.async_remove(DOMAIN, SERVICE_GENERATE_PDF)
-    _LOGGER.info("Sensor PDF Generator service unregistered.")
+    hass.services.async_remove(DOMAIN, SERVICE_LIST_PDFS)
+    _LOGGER.info("Sensor PDF Generator services unregistered.")
     try:
         if hass.data.get("frontend_panels", {}).get("pdf-panel-frontend"):
             _LOGGER.info("Removing sidepanel")
@@ -137,11 +154,14 @@ async def _async_handle_generate_pdf_service(hass: HomeAssistant, call: ServiceC
 
     try:
         total_energy = float(total_energy_state_now.state)
-        energy_used = await get_monthly_energy(hass, "sensor.total_energy", 2025, 8)
+        
+        # Use the actual entity_id passed in instead of hardcoded one
+        energy_used = await get_monthly_energy(hass, total_energy_entity_id, 2025, 8)
 
-        # Get value from 2 days ago
+        # Get value from 2 days ago using the same entity
         twodaysago = datetime.now() - timedelta(minutes=2880)
-        energy_2days_ago = await get_energy_at_time(hass, "sensor.total_energy", twodaysago)
+        # energy_2days_ago = await get_energy_at_time(hass, "sensor.total_energy", twodaysago)
+        energy_2days_ago = await get_energy_at_time(hass, total_energy_entity_id, twodaysago)
         if energy_2days_ago is None:
             energy_2days_ago = 0
 
@@ -154,10 +174,29 @@ async def _async_handle_generate_pdf_service(hass: HomeAssistant, call: ServiceC
         )
         _LOGGER.info(f"PDF '{filename}' generated successfully in Home Assistant config directory.")
 
+        # Fire an event to notify the frontend panel (optional)
+        hass.bus.async_fire("pdf_generator_complete", {
+            "filename": filename,
+            "entity_id": total_energy_entity_id,
+            "success": True
+        })
+
     except ValueError:
         _LOGGER.error("Could not convert energy values to float.")
+        hass.bus.async_fire("pdf_generator_complete", {
+            "filename": filename,
+            "entity_id": total_energy_entity_id,
+            "success": False,
+            "error": "Invalid energy values"
+        })
     except Exception as e:
         _LOGGER.error(f"Error generating PDF: {e}")
+        hass.bus.async_fire("pdf_generator_complete", {
+            "filename": filename,
+            "entity_id": total_energy_entity_id,
+            "success": False,
+            "error": str(e)
+        })
 
 async def get_energy_at_time(hass, entity_id: str, when: datetime):
     """Return the sensor's value (as float) at the given datetime."""
@@ -323,4 +362,41 @@ def generate_pdf_report(total_energy: float, energy_used: float, filename: str, 
     os.makedirs(receipts_dir, exist_ok=True)
     pdf_output_path = os.path.join(receipts_dir, filename)
     pdf.output(pdf_output_path)
+
+async def _async_handle_list_pdfs_service(hass: HomeAssistant, call: ServiceCall) -> dict:
+    """Handle the list_pdfs service call."""
+    try:
+        receipts_dir = os.path.join(hass.config.config_dir, "www", "receipts")
+        
+        # Create directory if it doesn't exist (using executor)
+        def ensure_directory():
+            if not os.path.exists(receipts_dir):
+                os.makedirs(receipts_dir, exist_ok=True)
+            return os.path.exists(receipts_dir)
+        
+        dir_exists = await hass.async_add_executor_job(ensure_directory)
+        if not dir_exists:
+            return {"pdf_files": []}
+        
+        # List all PDF files (using executor)
+        def list_pdf_files():
+            pdf_files = []
+            for filename in os.listdir(receipts_dir):
+                if filename.lower().endswith('.pdf'):
+                    pdf_files.append(filename)
+            
+            # Sort by modification time, newest first
+            pdf_files.sort(key=lambda f: os.path.getmtime(os.path.join(receipts_dir, f)), reverse=True)
+            return pdf_files
+        
+        pdf_files = await hass.async_add_executor_job(list_pdf_files)
+        
+        _LOGGER.debug(f"Found {len(pdf_files)} PDF files: {pdf_files}")
+        return {"pdf_files": pdf_files}
+        
+    except Exception as e:
+        _LOGGER.error(f"Error listing PDF files: {e}")
+        return {"pdf_files": []}
+
+
 

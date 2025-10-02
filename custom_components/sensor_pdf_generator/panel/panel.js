@@ -2,9 +2,11 @@ class PdfGeneratorPanel extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
-    this.users = []; // Will be filled from hass
+    this.users = [];
     this.filteredUsers = [];
     this.selectedUser = null;
+    this._initialized = false;
+    
     this.shadowRoot.innerHTML = `
       <style>
         * {
@@ -12,8 +14,9 @@ class PdfGeneratorPanel extends HTMLElement {
         }
 
         :host {
-          --ha-primary-color: #03a9f4;
-          --ha-primary-dark: #0288d1;
+          --ha-primary-color: #f84d44;
+          --ha-primary-dark: #e53e3e;
+          --ha-primary-light: #ff6b5b;
           --ha-success-color: #4caf50;
           --ha-error-color: #f44336;
           --ha-warning-color: #ff9800;
@@ -41,8 +44,8 @@ class PdfGeneratorPanel extends HTMLElement {
         /* Dark theme */
         @media (prefers-color-scheme: dark) {
           :host {
-            --bg-primary: #0d1117;
-            --bg-secondary: #161b22;
+            --bg-primary: #111111;
+            --bg-secondary: #1c1c1c;
             --bg-tertiary: #21262d;
             --text-primary: #f0f6fc;
             --text-secondary: #8b949e;
@@ -301,54 +304,46 @@ class PdfGeneratorPanel extends HTMLElement {
           font-variant-numeric: tabular-nums;
         }
 
-        /* PDF List */
-        .pdf-list {
-          list-style: none;
-          padding: 0;
-          margin: 0;
-          max-height: 300px;
-          overflow-y: auto;
+        /* PDF List - Simple */
+        .pdf-links {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
         }
 
-        .pdf-item {
-          padding: 12px 16px;
-          margin: 8px 0;
+        .pdf-link {
+          color: var(--ha-primary-color);
+          text-decoration: none;
+          padding: 8px 12px;
+          border-radius: 6px;
           background: var(--bg-tertiary);
-          border-radius: 8px;
-          color: var(--text-secondary);
-          font-size: 14px;
-          font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
-          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          transition: all 0.2s;
         }
 
-        .pdf-item:hover {
-          background: var(--bg-secondary);
-          color: var(--text-primary);
+        .pdf-link:hover {
+          background: var(--ha-primary-color);
+          color: white;
           transform: translateX(4px);
         }
 
         /* Scrollbars */
         .user-list::-webkit-scrollbar,
-        .pdf-list::-webkit-scrollbar,
         .main-content::-webkit-scrollbar {
           width: 6px;
         }
 
         .user-list::-webkit-scrollbar-track,
-        .pdf-list::-webkit-scrollbar-track,
         .main-content::-webkit-scrollbar-track {
           background: transparent;
         }
 
         .user-list::-webkit-scrollbar-thumb,
-        .pdf-list::-webkit-scrollbar-thumb,
         .main-content::-webkit-scrollbar-thumb {
           background: var(--border-color);
           border-radius: 3px;
         }
 
         .user-list::-webkit-scrollbar-thumb:hover,
-        .pdf-list::-webkit-scrollbar-thumb:hover,
         .main-content::-webkit-scrollbar-thumb:hover {
           background: var(--text-tertiary);
         }
@@ -373,25 +368,9 @@ class PdfGeneratorPanel extends HTMLElement {
           }
         }
 
-        /* Loading animation */
-        .loading {
-          animation: pulse 1.5s ease-in-out infinite;
-        }
-
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
-
-        /* Icons */
         .icon {
           width: 20px;
           height: 20px;
-        }
-
-        /* Hide original content */
-        .original-content {
-          display: none;
         }
       </style>
 
@@ -445,9 +424,8 @@ class PdfGeneratorPanel extends HTMLElement {
         
         <div class="card">
           <h2 class="card-title">Generated Reports</h2>
-          <ul id="pdf-list-ul" class="pdf-list">
-            <li class="pdf-item loading">Loading reports...</li>
-          </ul>
+          <button id="refresh-pdfs" style="margin-bottom: 10px;">Refresh List</button>
+          <div id="pdf-list" class="pdf-links"></div>
         </div>
       </div>
     `;
@@ -458,25 +436,98 @@ class PdfGeneratorPanel extends HTMLElement {
       this._filterUsers(e.target.value);
     });
     this.shadowRoot.getElementById("generate").addEventListener("click", () => this._generate());
-    this._renderUserList();
+    this.shadowRoot.getElementById("refresh-pdfs").addEventListener("click", () => this._loadPdfFiles());
+    
+    // Listen for PDF generation completion
+    if (this._hass?.connection) {
+      this._hass.connection.subscribeEvents((event) => {
+        this._handlePdfGenerationEvent(event);
+      }, "pdf_generator_complete");
+    }
   }
 
   set hass(hass) {
     this._hass = hass;
-
-    this.users = this._getUsersFromHass();
-    this.filteredUsers = this.users;
-    this._renderUserList();
-    this._updateStats();
+    
+    if (!this._initialized && hass) {
+      this._initialize();
+      this._initialized = true;
+      
+      if (hass.connection) {
+        hass.connection.subscribeEvents((event) => {
+          this._handlePdfGenerationEvent(event);
+        }, "pdf_generator_complete");
+      }
+      
+      this._loadPdfFiles();
+    }
   }
 
   get hass() {
     return this._hass;
   }
 
-  _stripSuffix(value, suffix) {
-    if (!value || !suffix) return value;
-    return value.endsWith(suffix) ? value.slice(0, -suffix.length) : value;
+  _initialize() {
+    this.users = this._getUsersFromHass();
+    this.filteredUsers = this.users;
+    this._renderUserList();
+    this._updateStats();
+  }
+
+  async _loadPdfFiles() {
+    try {
+      const response = await this._hass.connection.sendMessagePromise({
+        type: "call_service",
+        domain: "sensor_pdf_generator",
+        service: "list_pdfs",
+        service_data: {},
+        return_response: true
+      });
+      
+      const pdfNames = response.response?.pdf_files || [];
+      this._renderPdfLinks(pdfNames);
+      
+    } catch (error) {
+      console.error("Error loading PDF files:", error);
+      this._renderPdfLinks([]);
+    }
+  }
+
+  _handlePdfGenerationEvent(event) {
+    const status = this.shadowRoot.getElementById("status");
+    if (event.data.success) {
+      status.className = "status-message success";
+      status.textContent = `✅ PDF Generated: ${event.data.filename}`;
+      setTimeout(() => this._loadPdfFiles(), 1000);
+    } else {
+      status.className = "status-message error";
+      status.textContent = `❌ Error: ${event.data.error}`;
+    }
+  }
+
+  _renderPdfLinks(pdfNames) {
+    const container = this.shadowRoot.getElementById("pdf-list");
+    if (!container) {
+      console.error("PDF list container not found");
+      return;
+    }
+    
+    container.innerHTML = "";
+    
+    if (pdfNames.length === 0) {
+      container.innerHTML = '<div style="text-align: center; color: var(--text-secondary);">No reports generated yet</div>';
+      return;
+    }
+    
+    pdfNames.forEach(filename => {
+      const link = document.createElement("a");
+      link.href = `/local/receipts/${filename}`;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.className = "pdf-link";
+      link.textContent = filename;
+      container.appendChild(link);
+    });
   }
 
   _sanitizeDisplayName(name) {
@@ -501,92 +552,122 @@ class PdfGeneratorPanel extends HTMLElement {
 
     const sensorTypes = [
       "phase_a_current",
-      "phase_a_power",
+      "phase_a_power", 
       "phase_a_voltage",
       "temperature",
       "total_energy"
     ];
-
-    const usersByBase = new Map();
-
-    Object.entries(this._hass.states).forEach(([entityId, stateObj]) => {
-      if (!entityId.startsWith("switch.")) return;
-      const objectId = entityId.substring("switch.".length);
-      const baseName = this._stripSuffix(objectId, "_switch");
-      const entry = usersByBase.get(baseName) ?? {
-        name: baseName,
-        displayName: "",
-        sensors: {},
-        switchEntityId: entityId
-      };
-      entry.switchEntityId = entityId;
-      if (!entry.displayName) {
-        entry.displayName = this._sanitizeDisplayName(
-          stateObj?.attributes?.friendly_name ?? baseName
-        );
-      }
-      usersByBase.set(baseName, entry);
-    });
-
+  
+    const breakers = {};
+  
     Object.keys(this._hass.states).forEach(entityId => {
       if (!entityId.startsWith("sensor.")) return;
-      const objectId = entityId.substring("sensor.".length);
+      
+      const lower = entityId.toLowerCase();
+  
       sensorTypes.forEach(type => {
-        if (!objectId.endsWith(`_${type}`)) return;
-        const baseCandidate = objectId.slice(0, -(`_${type}`).length);
-        const baseName = this._stripSuffix(baseCandidate, "_switch");
-        const entry = usersByBase.get(baseName);
-        if (!entry) return;
-        entry.sensors[type] = entityId;
-        if (!entry.displayName) {
-          const friendly =
-            this._hass.states[entityId]?.attributes?.friendly_name ?? baseName;
-          entry.displayName = this._sanitizeDisplayName(friendly);
+        if (lower.endsWith(`_${type}`)) {
+          const withoutSensor = entityId.substring("sensor.".length);
+          const baseName = withoutSensor.substring(0, withoutSensor.length - (`_${type}`).length);
+          if (!breakers[baseName]) {
+            breakers[baseName] = {
+              types: new Set(),
+              friendlyName: null
+            };
+          }
+          breakers[baseName].types.add(type);
+          
+          // Get friendly name from the entity (prefer total_energy sensor for the name)
+          if (type === "total_energy" || !breakers[baseName].friendlyName) {
+            const stateObj = this._hass.states[entityId];
+            if (stateObj?.attributes?.friendly_name) {
+              breakers[baseName].friendlyName = stateObj.attributes.friendly_name;
+            }
+          }
         }
       });
     });
+    
+    const users = Object.entries(breakers).map(([baseName, data]) => {
+      if (!data.types.has("phase_a_current") || !data.types.has("total_energy")) return null;
+  
+      const sensors = {};
+      sensorTypes.forEach(type => {
+        if (data.types.has(type)) {
+          sensors[type] = `sensor.${baseName}_${type}`;
+        }
+      });
 
-    return Array.from(usersByBase.values())
-      .filter(entry => entry.sensors.total_energy)
-      .map(entry => ({
-        ...entry,
-        displayName: entry.displayName || this._sanitizeDisplayName(entry.name)
-      }));
+      // Create display name
+      const displayName = data.friendlyName 
+        ? this._sanitizeDisplayName(data.friendlyName)
+        : baseName;
+
+      return {
+        name: baseName,
+        displayName: displayName,
+        sensors
+      };
+    }).filter(u => u !== null);
+    
+    return users;
   }
 
   _filterUsers(query) {
-    const normalized = (query || "").toLowerCase();
-    if (!normalized) {
-      this.filteredUsers = this.users;
-    } else {
-      this.filteredUsers = this.users.filter(user =>
-        user.name.toLowerCase().includes(normalized) ||
-        user.switchEntityId?.toLowerCase().includes(normalized)
-      );
-    }
+    query = query.toLowerCase().trim();
+    this.filteredUsers = this.users.filter(u => 
+      u.name.toLowerCase().includes(query) || 
+      u.displayName.toLowerCase().includes(query)
+    );
     this._renderUserList();
   }
 
   _renderUserList() {
     const ul = this.shadowRoot.getElementById("user-list");
     ul.innerHTML = "";
+    
+    // If no filtered results, show a message
+    if (this.filteredUsers.length === 0) {
+      const li = document.createElement("li");
+      li.className = "user-item";
+      li.textContent = "No users found";
+      li.style.textAlign = "center";
+      li.style.fontStyle = "italic";
+      ul.appendChild(li);
+      return;
+    }
+    
     this.filteredUsers.forEach(user => {
       const li = document.createElement("li");
-      li.textContent = user.displayName || user.name;
-      li.style.cursor = "pointer";
+      li.className = "user-item";
+      
+      // Show display name with base name in parentheses
+      li.textContent = `${user.displayName} (${user.name})`;
+      
+      // Check if this user is currently selected
       if (this.selectedUser && this.selectedUser.name === user.name) {
         li.classList.add("selected");
       }
+      
       li.onclick = () => {
+        // Clear previous selection from all items
+        this.shadowRoot.querySelectorAll(".user-item").forEach(item => {
+          item.classList.remove("selected");
+        });
+        
+        // Set new selection
         this.selectedUser = user;
+        li.classList.add("selected");
         this._updateStats();
         this.shadowRoot.getElementById("generate").disabled = false;
-        this._renderUserList(); // re-render to update selection
       };
+      
       ul.appendChild(li);
     });
+    
     if (!this.selectedUser) {
       this.shadowRoot.getElementById("generate").disabled = true;
+      this._updateStats();
     }
   }
 
@@ -601,7 +682,9 @@ class PdfGeneratorPanel extends HTMLElement {
       this.shadowRoot.getElementById("stat-total-energy").textContent = "-";
       return;
     }
-    statsTitle.textContent = `${(this.selectedUser.displayName || this.selectedUser.name)} Current Stats`;
+    
+    // Use display name in stats title
+    statsTitle.textContent = `${this.selectedUser.displayName} Current Stats`;
     const sensors = this.selectedUser.sensors;
     this.shadowRoot.getElementById("stat-phase-a-current").textContent =
       this._hass.states[sensors.phase_a_current]?.state ?? "-";
@@ -622,7 +705,7 @@ class PdfGeneratorPanel extends HTMLElement {
     const today = new Date().toISOString().slice(0, 10);
     const filename = `${this.selectedUser.name}_${today}.pdf`;
     const totalEnergy = this.selectedUser.sensors.total_energy;
-    console.log(totalEnergy)
+    
     try {
       await this.hass.callService(
         "sensor_pdf_generator",
