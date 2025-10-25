@@ -4,7 +4,8 @@ class PdfGeneratorPanel extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this.users = [];
     this.filteredUsers = [];
-    this.selectedUser = null;
+    this.selectedUsers = new Set(); // Changed from selectedUser to selectedUsers Set
+    this.selectedDateRange = null;
     this._initialized = false;
     
     this.shadowRoot.innerHTML = `
@@ -155,6 +156,9 @@ class PdfGeneratorPanel extends HTMLElement {
           border: 2px solid transparent;
           position: relative;
           overflow: hidden;
+          display: flex;
+          align-items: center;
+          gap: 12px;
         }
 
         .user-item::before {
@@ -181,6 +185,59 @@ class PdfGeneratorPanel extends HTMLElement {
 
         .user-item.selected::before {
           opacity: 0.05;
+        }
+
+        /* Checkbox styling */
+        .user-checkbox {
+          width: 18px;
+          height: 18px;
+          border: 2px solid var(--border-color);
+          border-radius: 4px;
+          background: var(--bg-secondary);
+          position: relative;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          flex-shrink: 0;
+        }
+
+        .user-item.selected .user-checkbox {
+          background: var(--ha-primary-color);
+          border-color: var(--ha-primary-color);
+        }
+
+        .user-checkbox::after {
+          content: '✓';
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          color: white;
+          font-size: 12px;
+          font-weight: bold;
+          opacity: 0;
+          transition: opacity 0.2s;
+        }
+
+        .user-item.selected .user-checkbox::after {
+          opacity: 1;
+        }
+
+        .user-text {
+          flex: 1;
+        }
+
+        /* Selection counter */
+        .selection-info {
+          padding: 12px 24px;
+          background: var(--bg-tertiary);
+          border-top: 1px solid var(--border-color);
+          font-size: 14px;
+          color: var(--text-secondary);
+          text-align: center;
+        }
+
+        .selection-count {
+          font-weight: 600;
+          color: var(--ha-primary-color);
         }
 
         /* Generate Button */
@@ -261,8 +318,7 @@ class PdfGeneratorPanel extends HTMLElement {
         }
 
         .card:hover {
-          box-shadow: 0 8px 24px var(--shadow-medium);
-          transform: translateY(-2px);
+        
         }
 
         .card-title {
@@ -326,6 +382,26 @@ class PdfGeneratorPanel extends HTMLElement {
           transform: translateX(4px);
         }
 
+        /* Clear Selection Button */
+        .clear-selection-btn {
+          width: 100%;
+          padding: 8px 16px;
+          background: transparent;
+          color: var(--text-secondary);
+          border: 1px solid var(--border-color);
+          border-radius: 8px;
+          font-size: 14px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s;
+          margin-bottom: 12px;
+        }
+
+        .clear-selection-btn:hover {
+          background: var(--bg-tertiary);
+          color: var(--text-primary);
+        }
+
         /* Scrollbars */
         .user-list::-webkit-scrollbar,
         .main-content::-webkit-scrollbar {
@@ -372,6 +448,119 @@ class PdfGeneratorPanel extends HTMLElement {
           width: 20px;
           height: 20px;
         }
+
+        /* Simple Date Picker Styles */
+        .date-range-container {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+
+        .date-inputs {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+        }
+
+        .date-input-group {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .date-input-label {
+          font-size: 12px;
+          font-weight: 500;
+          color: var(--text-secondary);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .date-input {
+          padding: 12px 16px;
+          border: 2px solid var(--border-color);
+          border-radius: 8px;
+          background: var(--bg-tertiary);
+          color: var(--text-primary);
+          font-size: 14px;
+          font-weight: 500;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .date-input:focus {
+          outline: none;
+          border-color: var(--ha-primary-color);
+          background: var(--bg-secondary);
+          box-shadow: 0 0 0 4px rgba(248, 77, 68, 0.1);
+        }
+
+        .date-presets {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-top: 8px;
+        }
+
+        .date-preset-btn {
+          padding: 8px 12px;
+          background: var(--bg-tertiary);
+          border: 1px solid var(--border-color);
+          border-radius: 6px;
+          color: var(--text-secondary);
+          font-size: 12px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .date-preset-btn:hover {
+          background: var(--ha-primary-color);
+          color: white;
+          border-color: var(--ha-primary-color);
+        }
+
+        .date-info {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          padding: 12px;
+          background: var(--bg-tertiary);
+          border-radius: 8px;
+          border: 1px solid var(--border-color);
+        }
+
+        .date-info-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .date-info-label {
+          font-weight: 500;
+          color: var(--text-secondary);
+          font-size: 13px;
+        }
+
+        .date-info-value {
+          font-weight: 600;
+          color: var(--text-primary);
+          font-size: 13px;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+          .date-inputs {
+            grid-template-columns: 1fr;
+          }
+          
+          .date-presets {
+            flex-direction: column;
+          }
+          
+          .date-preset-btn {
+            width: 100%;
+          }
+        }
       </style>
 
       <div class="sidebar">
@@ -389,35 +578,60 @@ class PdfGeneratorPanel extends HTMLElement {
           <ul id="user-list" class="user-list"></ul>
         </div>
         
+        <div class="selection-info">
+          <span class="selection-count" id="selection-count">0</span> users selected
+        </div>
+        
         <div class="generate-section">
-          <button id="generate" class="generate-btn" disabled>Generate Receipt</button>
+          <button id="clear-selection" class="clear-selection-btn">Clear Selection</button>
+          <button id="generate" class="generate-btn" disabled>Generate Receipts</button>
           <div id="status" class="status-message"></div>
         </div>
       </div>
 
       <div class="main-content">
         <div class="card">
-          <h2 id="stats-title" class="card-title">Select a User</h2>
-          <div class="stats-grid">
-            <div class="stat-item">
-              <span class="stat-label">Phase A Current</span>
-              <span id="stat-phase-a-current" class="stat-value">-</span>
+          <h2 id="stats-title" class="card-title">Select Users</h2>
+          <div id="selected-users-list" class="stats-grid">
+            <div style="text-align: center; color: var(--text-secondary); padding: 20px;">
+              No users selected
             </div>
-            <div class="stat-item">
-              <span class="stat-label">Phase A Power</span>
-              <span id="stat-phase-a-power" class="stat-value">-</span>
+          </div>
+        </div>
+
+        <!-- Simple Date Range Picker -->
+        <div class="card">
+          <h2 class="card-title">Date Range Selection</h2>
+          <div class="date-range-container">
+            <div class="date-inputs">
+              <div class="date-input-group">
+                <label class="date-input-label">Start Date</label>
+                <input id="start-date" class="date-input" type="date" />
+              </div>
+              <div class="date-input-group">
+                <label class="date-input-label">End Date</label>
+                <input id="end-date" class="date-input" type="date" />
+              </div>
             </div>
-            <div class="stat-item">
-              <span class="stat-label">Phase A Voltage</span>
-              <span id="stat-phase-a-voltage" class="stat-value">-</span>
+            
+            <div class="date-presets">
+              <button class="date-preset-btn" data-days="1">Today</button>
+              <button class="date-preset-btn" data-days="7">Last 7 Days</button>
+              <button class="date-preset-btn" data-days="30">Last 30 Days</button>
+              <button class="date-preset-btn" data-days="90">Last 90 Days</button>
+              <button class="date-preset-btn" data-preset="month">This Month</button>
+              <button class="date-preset-btn" data-preset="year">This Year</button>
             </div>
-            <div class="stat-item">
-              <span class="stat-label">Temperature</span>
-              <span id="stat-temperature" class="stat-value">-</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">Total Energy</span>
-              <span id="stat-total-energy" class="stat-value">-</span>
+            
+            <div class="date-info">
+              <div class="date-info-item">
+                <span class="date-info-label">Selected Period:</span>
+                <span id="selected-period" class="date-info-value">No range selected</span>
+              </div>
+              <div class="date-info-item">
+                <span class="date-info-label">Total Days:</span>
+                <span id="total-days" class="date-info-value">0</span>
+              </div>
             </div>
           </div>
         </div>
@@ -436,7 +650,32 @@ class PdfGeneratorPanel extends HTMLElement {
       this._filterUsers(e.target.value);
     });
     this.shadowRoot.getElementById("generate").addEventListener("click", () => this._generate());
+    this.shadowRoot.getElementById("clear-selection").addEventListener("click", () => this._clearSelection());
     this.shadowRoot.getElementById("refresh-pdfs").addEventListener("click", () => this._loadPdfFiles());
+    
+    // Date picker event listeners
+    const startDate = this.shadowRoot.getElementById("start-date");
+    const endDate = this.shadowRoot.getElementById("end-date");
+    
+    startDate.addEventListener("change", () => this._updateDateRange());
+    endDate.addEventListener("change", () => this._updateDateRange());
+    
+    // Date preset buttons
+    this.shadowRoot.querySelectorAll(".date-preset-btn").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        const days = e.target.dataset.days;
+        const preset = e.target.dataset.preset;
+        
+        if (days) {
+          this._setDatePreset(parseInt(days));
+        } else if (preset) {
+          this._setDatePresetSpecial(preset);
+        }
+      });
+    });
+    
+    // Initialize with today's date
+    this._initializeDates();
     
     // Listen for PDF generation completion
     if (this._hass?.connection) {
@@ -471,7 +710,89 @@ class PdfGeneratorPanel extends HTMLElement {
     this.users = this._getUsersFromHass();
     this.filteredUsers = this.users;
     this._renderUserList();
-    this._updateStats();
+    this._updateSelectedUsersDisplay();
+  }
+
+  _initializeDates() {
+    const today = new Date();
+    const todayString = today.toISOString().split('T')[0];
+    
+    this.shadowRoot.getElementById("start-date").value = todayString;
+    this.shadowRoot.getElementById("end-date").value = todayString;
+    
+    this._updateDateRange();
+  }
+
+  _setDatePreset(days) {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - days + 1);
+    
+    this.shadowRoot.getElementById("start-date").value = startDate.toISOString().split('T')[0];
+    this.shadowRoot.getElementById("end-date").value = endDate.toISOString().split('T')[0];
+    
+    this._updateDateRange();
+  }
+
+  _setDatePresetSpecial(preset) {
+    const today = new Date();
+    let startDate, endDate;
+    
+    if (preset === "month") {
+      startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+      endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    } else if (preset === "year") {
+      startDate = new Date(today.getFullYear(), 0, 1);
+      endDate = new Date(today.getFullYear(), 11, 31);
+    }
+    
+    this.shadowRoot.getElementById("start-date").value = startDate.toISOString().split('T')[0];
+    this.shadowRoot.getElementById("end-date").value = endDate.toISOString().split('T')[0];
+    
+    this._updateDateRange();
+  }
+
+  _updateDateRange() {
+    const startInput = this.shadowRoot.getElementById("start-date");
+    const endInput = this.shadowRoot.getElementById("end-date");
+    
+    if (!startInput.value || !endInput.value) {
+      this.shadowRoot.getElementById("selected-period").textContent = "No range selected";
+      this.shadowRoot.getElementById("total-days").textContent = "0";
+      this.selectedDateRange = null;
+      return;
+    }
+    
+    const startDate = new Date(startInput.value);
+    const endDate = new Date(endInput.value);
+    
+    // Validate date range
+    if (startDate > endDate) {
+      // Swap dates if start is after end
+      startInput.value = endInput.value;
+      endInput.value = startInput.value;
+      return;
+    }
+    
+    // Calculate days difference
+    const diffTime = endDate.getTime() - startDate.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    
+    // Format display
+    const formatOptions = { year: 'numeric', month: 'short', day: 'numeric' };
+    const startFormatted = startDate.toLocaleDateString('en-US', formatOptions);
+    const endFormatted = endDate.toLocaleDateString('en-US', formatOptions);
+    
+    this.shadowRoot.getElementById("selected-period").textContent = `${startFormatted} - ${endFormatted}`;
+    this.shadowRoot.getElementById("total-days").textContent = diffDays;
+    
+    // Store the selected range
+    this.selectedDateRange = {
+      start: startDate,
+      end: endDate,
+      startString: startInput.value,
+      endString: endInput.value
+    };
   }
 
   async _loadPdfFiles() {
@@ -497,7 +818,11 @@ class PdfGeneratorPanel extends HTMLElement {
     const status = this.shadowRoot.getElementById("status");
     if (event.data.success) {
       status.className = "status-message success";
-      status.textContent = `✅ PDF Generated: ${event.data.filename}`;
+      if (event.data.file_count > 1) {
+        status.textContent = `✅ Generated ${event.data.file_count} PDFs successfully`;
+      } else {
+        status.textContent = `✅ PDF Generated: ${event.data.filename || 'Receipt'}`;
+      }
       setTimeout(() => this._loadPdfFiles(), 1000);
     } else {
       status.className = "status-message error";
@@ -630,9 +955,7 @@ class PdfGeneratorPanel extends HTMLElement {
     if (this.filteredUsers.length === 0) {
       const li = document.createElement("li");
       li.className = "user-item";
-      li.textContent = "No users found";
-      li.style.textAlign = "center";
-      li.style.fontStyle = "italic";
+      li.innerHTML = '<div class="user-text" style="text-align: center; font-style: italic;">No users found</div>';
       ul.appendChild(li);
       return;
     }
@@ -641,86 +964,403 @@ class PdfGeneratorPanel extends HTMLElement {
       const li = document.createElement("li");
       li.className = "user-item";
       
-      // Show display name with base name in parentheses
-      li.textContent = `${user.displayName} (${user.name})`;
-      
       // Check if this user is currently selected
-      if (this.selectedUser && this.selectedUser.name === user.name) {
+      if (this.selectedUsers.has(user.name)) {
         li.classList.add("selected");
       }
       
+      li.innerHTML = `
+        <div class="user-checkbox"></div>
+        <div class="user-text">${user.displayName} (${user.name})</div>
+      `;
+      
       li.onclick = () => {
-        // Clear previous selection from all items
-        this.shadowRoot.querySelectorAll(".user-item").forEach(item => {
-          item.classList.remove("selected");
-        });
+        // Toggle selection
+        if (this.selectedUsers.has(user.name)) {
+          this.selectedUsers.delete(user.name);
+          li.classList.remove("selected");
+        } else {
+          this.selectedUsers.add(user.name);
+          li.classList.add("selected");
+        }
         
-        // Set new selection
-        this.selectedUser = user;
-        li.classList.add("selected");
-        this._updateStats();
-        this.shadowRoot.getElementById("generate").disabled = false;
+        this._updateSelectionInfo();
+        this._updateSelectedUsersDisplay();
+        this._updateGenerateButton();
       };
       
       ul.appendChild(li);
     });
-    
-    if (!this.selectedUser) {
-      this.shadowRoot.getElementById("generate").disabled = true;
-      this._updateStats();
-    }
   }
 
-  _updateStats() {
+  _updateSelectionInfo() {
+    const count = this.selectedUsers.size;
+    this.shadowRoot.getElementById("selection-count").textContent = count;
+  }
+
+  _updateSelectedUsersDisplay() {
+    const container = this.shadowRoot.getElementById("selected-users-list");
     const statsTitle = this.shadowRoot.getElementById("stats-title");
-    if (!this._hass || !this.selectedUser) {
-      statsTitle.textContent = "Current Stats";
-      this.shadowRoot.getElementById("stat-phase-a-current").textContent = "-";
-      this.shadowRoot.getElementById("stat-phase-a-power").textContent = "-";
-      this.shadowRoot.getElementById("stat-phase-a-voltage").textContent = "-";
-      this.shadowRoot.getElementById("stat-temperature").textContent = "-";
-      this.shadowRoot.getElementById("stat-total-energy").textContent = "-";
+    
+    if (this.selectedUsers.size === 0) {
+      statsTitle.textContent = "Select Users";
+      container.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 20px;">No users selected</div>';
       return;
     }
     
-    // Use display name in stats title
-    statsTitle.textContent = `${this.selectedUser.displayName} Current Stats`;
-    const sensors = this.selectedUser.sensors;
-    this.shadowRoot.getElementById("stat-phase-a-current").textContent =
-      this._hass.states[sensors.phase_a_current]?.state ?? "-";
-    this.shadowRoot.getElementById("stat-phase-a-power").textContent =
-      this._hass.states[sensors.phase_a_power]?.state ?? "-";
-    this.shadowRoot.getElementById("stat-phase-a-voltage").textContent =
-      this._hass.states[sensors.phase_a_voltage]?.state ?? "-";
-    this.shadowRoot.getElementById("stat-temperature").textContent =
-      this._hass.states[sensors.temperature]?.state ?? "-";
-    this.shadowRoot.getElementById("stat-total-energy").textContent =
-      this._hass.states[sensors.total_energy]?.state ?? "-";
+    statsTitle.textContent = `Selected Users (${this.selectedUsers.size})`;
+    container.innerHTML = "";
+    
+    // Get the actual user objects for the selected names
+    const selectedUserObjects = this.users.filter(user => this.selectedUsers.has(user.name));
+    
+    selectedUserObjects.forEach((user, index) => {
+      const userDiv = document.createElement("div");
+      userDiv.className = "stat-item";
+      userDiv.style.borderBottom = "1px solid var(--border-color)";
+      userDiv.style.padding = "12px 0";
+      userDiv.style.display = "flex";
+      userDiv.style.flexDirection = "column";
+      userDiv.style.gap = "0";
+      
+      // Main row with name, energy, and controls
+      const mainRow = document.createElement("div");
+      mainRow.style.display = "flex";
+      mainRow.style.justifyContent = "space-between";
+      mainRow.style.alignItems = "center";
+      mainRow.style.padding = "4px 0";
+      
+      const leftDiv = document.createElement("div");
+      leftDiv.style.display = "flex";
+      leftDiv.style.flexDirection = "column";
+      leftDiv.style.gap = "2px";
+      leftDiv.style.flex = "1";
+      leftDiv.style.marginRight = "24px"; // Added more space between name and energy
+      
+      const nameDiv = document.createElement("div");
+      nameDiv.style.fontWeight = "600";
+      nameDiv.style.color = "var(--text-primary)";
+      nameDiv.style.fontSize = "14px";
+      nameDiv.textContent = user.displayName;
+      
+      const idDiv = document.createElement("div");
+      idDiv.style.fontSize = "11px";
+      idDiv.style.color = "var(--text-secondary)";
+      idDiv.textContent = user.name;
+      
+      leftDiv.appendChild(nameDiv);
+      leftDiv.appendChild(idDiv);
+      
+      // Energy display
+      const energyDiv = document.createElement("div");
+      energyDiv.style.display = "flex";
+      energyDiv.style.flexDirection = "column";
+      energyDiv.style.alignItems = "flex-end";
+      energyDiv.style.gap = "2px";
+      energyDiv.style.marginRight = "16px"; // Increased space between energy and controls
+      energyDiv.style.minWidth = "80px"; // Ensure consistent width for energy column
+      
+      if (this._hass && user.sensors.total_energy) {
+        const energyState = this._hass.states[user.sensors.total_energy];
+        if (energyState) {
+          const energyValueDiv = document.createElement("div");
+          energyValueDiv.style.fontWeight = "600";
+          energyValueDiv.style.color = "var(--text-primary)";
+          energyValueDiv.style.fontSize = "14px";
+          energyValueDiv.style.fontVariantNumeric = "tabular-nums";
+          energyValueDiv.style.textAlign = "right"; // Right-align the numbers
+          
+          const numValue = parseFloat(energyState.state);
+          energyValueDiv.textContent = `${numValue.toFixed(2)} kWh`;
+          
+          const energyLabelDiv = document.createElement("div");
+          energyLabelDiv.style.fontSize = "10px";
+          energyLabelDiv.style.color = "var(--text-secondary)";
+          energyLabelDiv.style.textTransform = "uppercase";
+          energyLabelDiv.style.letterSpacing = "0.5px";
+          energyLabelDiv.style.textAlign = "right"; // Right-align the label
+          energyLabelDiv.textContent = "Total Energy";
+          
+          energyDiv.appendChild(energyValueDiv);
+          energyDiv.appendChild(energyLabelDiv);
+        }
+      }
+      
+      // Controls (expand button and remove button)
+      const controlsDiv = document.createElement("div");
+      controlsDiv.style.display = "flex";
+      controlsDiv.style.gap = "8px";
+      controlsDiv.style.alignItems = "center";
+      controlsDiv.style.flexShrink = "0"; // Prevent controls from shrinking
+      
+      // Expand/collapse button
+      const expandBtn = document.createElement("button");
+      expandBtn.style.background = "transparent";
+      expandBtn.style.border = "1px solid var(--border-color)";
+      expandBtn.style.borderRadius = "4px";
+      expandBtn.style.padding = "4px 6px";
+      expandBtn.style.fontSize = "12px";
+      expandBtn.style.color = "var(--text-secondary)";
+      expandBtn.style.cursor = "pointer";
+      expandBtn.style.transition = "all 0.2s";
+      expandBtn.style.display = "flex";
+      expandBtn.style.alignItems = "center";
+      expandBtn.style.justifyContent = "center";
+      expandBtn.innerHTML = "▼";
+      expandBtn.title = "Show details";
+      
+      // Remove button
+      const removeBtn = document.createElement("button");
+      removeBtn.style.background = "transparent";
+      removeBtn.style.border = "1px solid var(--border-color)";
+      removeBtn.style.borderRadius = "4px";
+      removeBtn.style.padding = "4px 6px";
+      removeBtn.style.fontSize = "10px";
+      removeBtn.style.color = "var(--text-secondary)";
+      removeBtn.style.cursor = "pointer";
+      removeBtn.style.transition = "all 0.2s";
+      removeBtn.textContent = "✕";
+      removeBtn.title = "Remove";
+      removeBtn.onmouseover = () => {
+        removeBtn.style.background = "var(--ha-error-color)";
+        removeBtn.style.color = "white";
+        removeBtn.style.borderColor = "var(--ha-error-color)";
+      };
+      removeBtn.onmouseout = () => {
+        removeBtn.style.background = "transparent";
+        removeBtn.style.color = "var(--text-secondary)";
+        removeBtn.style.borderColor = "var(--border-color)";
+      };
+      removeBtn.onclick = (e) => {
+        e.stopPropagation();
+        this.selectedUsers.delete(user.name);
+        this._updateSelectionInfo();
+        this._updateSelectedUsersDisplay();
+        this._updateGenerateButton();
+        this._renderUserList(); // Re-render to update checkboxes
+      };
+      
+      controlsDiv.appendChild(expandBtn);
+      controlsDiv.appendChild(removeBtn);
+      
+      mainRow.appendChild(leftDiv);
+      mainRow.appendChild(energyDiv);
+      mainRow.appendChild(controlsDiv);
+      
+      // Expandable stats section (initially hidden)
+      const statsSection = document.createElement("div");
+      statsSection.style.display = "none";
+      statsSection.style.marginTop = "12px";
+      statsSection.style.paddingTop = "12px";
+      statsSection.style.borderTop = "1px solid var(--border-color)";
+      
+      const statsGrid = document.createElement("div");
+      statsGrid.style.display = "grid";
+      statsGrid.style.gridTemplateColumns = "1fr 1fr";
+      statsGrid.style.gap = "8px";
+      
+      // Define the sensor mappings with their display info (excluding total_energy since it's shown above)
+      const sensorMappings = [
+        {
+          key: 'phase_a_current',
+          label: 'Current',
+          unit: 'A',
+          icon: '🔌',
+          priority: 2
+        },
+        {
+          key: 'phase_a_power',
+          label: 'Power',
+          unit: 'W',
+          icon: '💡',
+          priority: 3
+        },
+        {
+          key: 'phase_a_voltage',
+          label: 'Voltage',
+          unit: 'V',
+          icon: '⚡',
+          priority: 4
+        },
+        {
+          key: 'temperature',
+          label: 'Temperature',
+          unit: '°C',
+          icon: '🌡️',
+          priority: 5
+        }
+      ];
+      
+      // Sort by priority and filter available sensors
+      const availableStats = sensorMappings
+        .filter(mapping => user.sensors[mapping.key])
+        .sort((a, b) => a.priority - b.priority);
+      
+      availableStats.forEach(mapping => {
+        const sensorEntityId = user.sensors[mapping.key];
+        const sensorState = this._hass?.states[sensorEntityId];
+        
+        if (sensorState) {
+          const statDiv = document.createElement("div");
+          statDiv.style.display = "flex";
+          statDiv.style.flexDirection = "column";
+          statDiv.style.padding = "8px 12px";
+          statDiv.style.background = "var(--bg-tertiary)";
+          statDiv.style.borderRadius = "6px";
+          statDiv.style.border = "1px solid var(--border-color)";
+          
+          const labelDiv = document.createElement("div");
+          labelDiv.style.fontSize = "11px";
+          labelDiv.style.color = "var(--text-secondary)";
+          labelDiv.style.fontWeight = "500";
+          labelDiv.style.textTransform = "uppercase";
+          labelDiv.style.letterSpacing = "0.5px";
+          labelDiv.style.marginBottom = "2px";
+          labelDiv.textContent = `${mapping.icon} ${mapping.label}`;
+          
+          const valueDiv = document.createElement("div");
+          valueDiv.style.fontSize = "14px";
+          valueDiv.style.fontWeight = "600";
+          valueDiv.style.color = "var(--text-primary)";
+          valueDiv.style.fontVariantNumeric = "tabular-nums";
+          
+          // Format the value based on sensor type
+          let displayValue = sensorState.state;
+          if (!isNaN(displayValue)) {
+            const numValue = parseFloat(displayValue);
+            if (mapping.key === 'phase_a_current') {
+              displayValue = numValue.toFixed(1);
+            } else if (mapping.key === 'phase_a_power') {
+              displayValue = Math.round(numValue).toString();
+            } else if (mapping.key === 'phase_a_voltage') {
+              displayValue = Math.round(numValue).toString();
+            } else if (mapping.key === 'temperature') {
+              displayValue = numValue.toFixed(1);
+            }
+          }
+          
+          valueDiv.textContent = `${displayValue} ${mapping.unit}`;
+          
+          statDiv.appendChild(labelDiv);
+          statDiv.appendChild(valueDiv);
+          statsGrid.appendChild(statDiv);
+        }
+      });
+      
+      // If we have an odd number of stats, make the last one span full width
+      if (availableStats.length % 2 === 1) {
+        const lastChild = statsGrid.lastChild;
+        if (lastChild) {
+          lastChild.style.gridColumn = "1 / -1";
+        }
+      }
+      
+      statsSection.appendChild(statsGrid);
+      
+      // Expand/collapse functionality
+      let isExpanded = false;
+      expandBtn.onclick = (e) => {
+        e.stopPropagation();
+        isExpanded = !isExpanded;
+        
+        if (isExpanded) {
+          statsSection.style.display = "block";
+          expandBtn.innerHTML = "▲";
+          expandBtn.title = "Hide details";
+          expandBtn.style.color = "var(--ha-primary-color)";
+        } else {
+          statsSection.style.display = "none";
+          expandBtn.innerHTML = "▼";
+          expandBtn.title = "Show details";
+          expandBtn.style.color = "var(--text-secondary)";
+        }
+      };
+      
+      // Only show expand button if there are additional stats to show
+      if (availableStats.length === 0) {
+        expandBtn.style.display = "none";
+      }
+      
+      userDiv.appendChild(mainRow);
+      userDiv.appendChild(statsSection);
+      container.appendChild(userDiv);
+    });
+  }
+
+  _updateGenerateButton() {
+    const generateBtn = this.shadowRoot.getElementById("generate");
+    const clearBtn = this.shadowRoot.getElementById("clear-selection");
+    
+    generateBtn.disabled = this.selectedUsers.size === 0;
+    clearBtn.style.display = this.selectedUsers.size === 0 ? "none" : "block";
+    
+    // Update button text
+    if (this.selectedUsers.size === 0) {
+      generateBtn.textContent = "Generate Receipts";
+    } else if (this.selectedUsers.size === 1) {
+      generateBtn.textContent = "Generate Receipt";
+    } else {
+      generateBtn.textContent = `Generate ${this.selectedUsers.size} Receipts`;
+    }
+  }
+
+  _clearSelection() {
+    this.selectedUsers.clear();
+    this._updateSelectionInfo();
+    this._updateSelectedUsersDisplay();
+    this._updateGenerateButton();
+    this._renderUserList(); // Re-render to update checkboxes
   }
 
   async _generate() {
     const status = this.shadowRoot.getElementById("status");
-    if (!this.selectedUser) return;
-    status.textContent = "Generating PDF...";
-    const today = new Date().toISOString().slice(0, 10);
-    const filename = `${this.selectedUser.name}_${today}.pdf`;
-    const totalEnergy = this.selectedUser.sensors.total_energy;
+    if (this.selectedUsers.size === 0) return;
+    
+    status.className = "status-message loading";
+    status.textContent = `Generating ${this.selectedUsers.size} PDF${this.selectedUsers.size > 1 ? 's' : ''}...`;
+    
+    const dateRange = this.getSelectedDateRange();
+    
+    // Get the selected user objects and their total energy sensors
+    const selectedUserObjects = this.users.filter(user => this.selectedUsers.has(user.name));
+    const entityIds = selectedUserObjects.map(user => user.sensors.total_energy);
     
     try {
       await this.hass.callService(
         "sensor_pdf_generator",
         "generate_pdf",
         {
-          total_energy_entity_id: totalEnergy,
-          filename
+          total_energy_entity_ids: entityIds,
+          filename_prefix: "receipt",
+          start_date: dateRange.startString,
+          end_date: dateRange.endString
         }
       );
-      status.textContent = `✅ PDF Generated: ${filename}`;
+      
+      // Status will be updated by the event handler
     } catch (err) {
       console.error("Service call failed:", err);
-      status.textContent = "❌ Error generating PDF";
+      status.className = "status-message error";
+      status.textContent = "❌ Error generating PDFs";
     }
+  }
+
+  getSelectedDateRange() {
+    // Return the stored selection or current input values
+    if (this.selectedDateRange) {
+      return this.selectedDateRange;
+    }
+    
+    // Default to today if nothing is selected
+    const today = new Date();
+    return {
+      start: today,
+      end: today,
+      startString: today.toISOString().split('T')[0],
+      endString: today.toISOString().split('T')[0]
+    };
   }
 }
 
 customElements.define("pdf-generator-panel", PdfGeneratorPanel);
+
