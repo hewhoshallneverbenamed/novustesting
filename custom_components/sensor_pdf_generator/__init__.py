@@ -484,7 +484,21 @@ def generate_pdf_report(total_energy: float, energy_used: float, filename: str, 
     # Add entity name if provided
     if entity_name:
         pdf.set_font("Amiri", size=14)
-        pdf.cell(page_width, 8, f"Meter: {entity_name}", align="C", ln=1)
+        # If the entity name contains Arabic characters, reshape + bidi it so Arabic glyphs render correctly
+        def _contains_arabic(s: str) -> bool:
+            if not s:
+                return False
+            for ch in s:
+                # Arabic blocks: \u0600-\u06FF, \u0750-\u077F, \u08A0-\u08FF, \uFB50-\uFDFF, \uFE70-\uFEFF
+                if ("\u0600" <= ch <= "\u06FF") or ("\u0750" <= ch <= "\u077F") or ("\u08A0" <= ch <= "\u08FF") or ("\uFB50" <= ch <= "\uFDFF") or ("\uFE70" <= ch <= "\uFEFF"):
+                    return True
+            return False
+
+        display_name = entity_name
+        if _contains_arabic(entity_name):
+            display_name = get_display(arabic_reshaper.reshape(entity_name))
+
+        pdf.cell(page_width, 8, f"Meter: {display_name}", align="C", ln=1)
     
     pdf.set_font("Amiri", size=13)
     pdf.cell(page_width, 7, "-" * (int(page_width // 7)), align="C", ln=1)
