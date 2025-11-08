@@ -13,6 +13,7 @@ from homeassistant.components.frontend import async_register_built_in_panel
 from homeassistant.components.frontend import async_remove_panel
 from homeassistant.helpers.entity_registry import async_get, async_entries_for_config_entry
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import config_validation as cv
 import arabic_reshaper
 from bidi.algorithm import get_display
 # import fitz  # PyMuPDF
@@ -95,6 +96,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         """Handle the list_pdfs service call."""
         return await _async_handle_list_pdfs_service(hass, call)
 
+    # Register the delete PDF service
+    async def delete_pdf_service(call: ServiceCall) -> None:
+        """Handle delete PDF service call."""
+        filename = call.data.get("filename")
+        
+        if not filename:
+            _LOGGER.error("No filename provided for deletion")
+            return
+        
+        # Sanitize filename to prevent path traversal
+        filename = os.path.basename(filename)
+        
+        receipts_dir = hass.config.path("www", "receipts")
+        file_path = os.path.join(receipts_dir, filename)
+        
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                _LOGGER.info(f"Deleted PDF file: {filename}")
+            else:
+                _LOGGER.warning(f"PDF file not found: {filename}")
+        except Exception as e:
+            _LOGGER.error(f"Error deleting PDF file {filename}: {str(e)}")
+            raise
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_GENERATE_PDF,
@@ -115,6 +141,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         handle_list_pdfs_service,
         schema=SERVICE_LIST_PDFS_SCHEMA,
         supports_response=True,
+    )
+    
+    hass.services.async_register(
+        DOMAIN,
+        "delete_pdf",
+        delete_pdf_service,
+        schema=vol.Schema({
+            vol.Required("filename"): cv.string,
+        })
     )
     
     # Register the panel in sidebar

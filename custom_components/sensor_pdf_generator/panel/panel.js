@@ -583,7 +583,10 @@ class PdfGeneratorPanel extends HTMLElement {
         </div>
         
         <div class="generate-section">
-          <button id="clear-selection" class="clear-selection-btn">Clear Selection</button>
+          <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+            <button id="select-all" class="clear-selection-btn" style="flex: 1; margin-bottom: 0;">Select All</button>
+            <button id="clear-selection" class="clear-selection-btn" style="flex: 1; margin-bottom: 0;">Clear Selection</button>
+          </div>
           <button id="generate" class="generate-btn" disabled>Generate Receipts</button>
           <div id="status" class="status-message"></div>
         </div>
@@ -650,6 +653,7 @@ class PdfGeneratorPanel extends HTMLElement {
       this._filterUsers(e.target.value);
     });
     this.shadowRoot.getElementById("generate").addEventListener("click", () => this._generate());
+    this.shadowRoot.getElementById("select-all").addEventListener("click", () => this._selectAll());
     this.shadowRoot.getElementById("clear-selection").addEventListener("click", () => this._clearSelection());
     this.shadowRoot.getElementById("refresh-pdfs").addEventListener("click", () => this._loadPdfFiles());
     
@@ -845,13 +849,80 @@ class PdfGeneratorPanel extends HTMLElement {
     }
     
     pdfNames.forEach(filename => {
+      const wrapper = document.createElement("div");
+      wrapper.style.display = "flex";
+      wrapper.style.alignItems = "center";
+      wrapper.style.gap = "8px";
+      wrapper.style.marginBottom = "4px";
+      
       const link = document.createElement("a");
       link.href = `/local/receipts/${filename}`;
       link.target = "_blank";
       link.rel = "noopener noreferrer";
       link.className = "pdf-link";
+      link.style.flex = "1";
+      link.style.marginBottom = "0";
       link.textContent = filename;
-      container.appendChild(link);
+      
+      const deleteBtn = document.createElement("button");
+      deleteBtn.textContent = "🗑️";
+      deleteBtn.title = "Delete receipt";
+      deleteBtn.style.padding = "8px 12px";
+      deleteBtn.style.background = "transparent";
+      deleteBtn.style.border = "1px solid var(--border-color)";
+      deleteBtn.style.borderRadius = "6px";
+      deleteBtn.style.cursor = "pointer";
+      deleteBtn.style.transition = "all 0.2s";
+      deleteBtn.style.fontSize = "14px";
+      
+      deleteBtn.onmouseover = () => {
+        deleteBtn.style.background = "var(--ha-error-color)";
+        deleteBtn.style.borderColor = "var(--ha-error-color)";
+      };
+      
+      deleteBtn.onmouseout = () => {
+        deleteBtn.style.background = "transparent";
+        deleteBtn.style.borderColor = "var(--border-color)";
+      };
+      
+      deleteBtn.onclick = async () => {
+        if (confirm(`Are you sure you want to delete "${filename}"?\n\nThis action cannot be undone.`)) {
+          try {
+            await this._hass.callService(
+              "sensor_pdf_generator",
+              "delete_pdf",
+              { filename: filename }
+            );
+            
+            // Remove from UI immediately
+            wrapper.remove();
+            
+            // Show success message
+            const statusDiv = document.createElement("div");
+            statusDiv.textContent = `✅ Deleted: ${filename}`;
+            statusDiv.style.padding = "8px 12px";
+            statusDiv.style.background = "rgba(76, 175, 80, 0.1)";
+            statusDiv.style.border = "1px solid rgba(76, 175, 80, 0.2)";
+            statusDiv.style.borderRadius = "6px";
+            statusDiv.style.color = "var(--ha-success-color)";
+            statusDiv.style.fontSize = "14px";
+            statusDiv.style.marginBottom = "8px";
+            
+            container.insertBefore(statusDiv, container.firstChild);
+            
+            // Remove success message after 3 seconds
+            setTimeout(() => statusDiv.remove(), 3000);
+            
+          } catch (error) {
+            console.error("Error deleting PDF:", error);
+            alert(`Failed to delete "${filename}". Please try again.`);
+          }
+        }
+      };
+      
+      wrapper.appendChild(link);
+      wrapper.appendChild(deleteBtn);
+      container.appendChild(wrapper);
     });
   }
 
@@ -862,7 +933,6 @@ class PdfGeneratorPanel extends HTMLElement {
       /phase a current$/i,
       /phase a power$/i,
       /phase a voltage$/i,
-      /temperature$/i,
       /total energy$/i,
       /switch$/i
     ].forEach(pattern => {
@@ -879,7 +949,6 @@ class PdfGeneratorPanel extends HTMLElement {
       "phase_a_current",
       "phase_a_power", 
       "phase_a_voltage",
-      "temperature",
       "total_energy"
     ];
   
@@ -971,7 +1040,7 @@ class PdfGeneratorPanel extends HTMLElement {
       
       li.innerHTML = `
         <div class="user-checkbox"></div>
-        <div class="user-text">${user.displayName} (${user.name})</div>
+        <div class="user-text">${user.displayName}</div>
       `;
       
       li.onclick = () => {
@@ -991,6 +1060,18 @@ class PdfGeneratorPanel extends HTMLElement {
       
       ul.appendChild(li);
     });
+  }
+
+  _selectAll() {
+    // Add all filtered users to selection
+    this.filteredUsers.forEach(user => {
+      this.selectedUsers.add(user.name);
+    });
+    
+    this._updateSelectionInfo();
+    this._updateSelectedUsersDisplay();
+    this._updateGenerateButton();
+    this._renderUserList(); // Re-render to update checkboxes
   }
 
   _updateSelectionInfo() {
@@ -1181,13 +1262,6 @@ class PdfGeneratorPanel extends HTMLElement {
           unit: 'V',
           icon: '⚡',
           priority: 4
-        },
-        {
-          key: 'temperature',
-          label: 'Temperature',
-          unit: '°C',
-          icon: '🌡️',
-          priority: 5
         }
       ];
       
@@ -1290,9 +1364,21 @@ class PdfGeneratorPanel extends HTMLElement {
   _updateGenerateButton() {
     const generateBtn = this.shadowRoot.getElementById("generate");
     const clearBtn = this.shadowRoot.getElementById("clear-selection");
+    const selectAllBtn = this.shadowRoot.getElementById("select-all");
     
     generateBtn.disabled = this.selectedUsers.size === 0;
-    clearBtn.style.display = this.selectedUsers.size === 0 ? "none" : "block";
+    
+    // Show/hide select all based on if all filtered users are selected
+    const allFilteredSelected = this.filteredUsers.length > 0 && 
+      this.filteredUsers.every(user => this.selectedUsers.has(user.name));
+    
+    if (allFilteredSelected && this.filteredUsers.length > 0) {
+      selectAllBtn.style.display = "none";
+      clearBtn.style.flex = "1";
+    } else {
+      selectAllBtn.style.display = "block";
+      clearBtn.style.flex = "1";
+    }
     
     // Update button text
     if (this.selectedUsers.size === 0) {
