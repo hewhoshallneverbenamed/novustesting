@@ -711,10 +711,13 @@ class PdfGeneratorPanel extends HTMLElement {
   }
 
   _initialize() {
-    this.users = this._getUsersFromHass();
-    this.filteredUsers = this.users;
-    this._renderUserList();
-    this._updateSelectedUsersDisplay();
+    // Make this async since _getUsersFromHass is now async
+    this._getUsersFromHass().then(users => {
+      this.users = users;
+      this.filteredUsers = users;
+      this._renderUserList();
+      this._updateSelectedUsersDisplay();
+    });
   }
 
   _initializeDates() {
@@ -942,8 +945,44 @@ class PdfGeneratorPanel extends HTMLElement {
     return result || name.trim();
   }
 
-  _getUsersFromHass() {
+  async _getUsersFromHass() {
     if (!this._hass) return [];
+
+    // console.log("=== STARTING USER DISCOVERY ===");
+
+    // Fetch device registry and entity registry
+    let deviceRegistry = {};
+    let entityRegistry = {};
+    
+    try {
+      const devices = await this._hass.callWS({
+        type: "config/device_registry/list"
+      });
+      
+      devices.forEach(device => {
+        deviceRegistry[device.id] = {
+          id: device.id,
+          name: device.name,
+          name_by_user: device.name_by_user,
+          manufacturer: device.manufacturer,
+          model: device.model,
+          model_id: device.model_id
+        };
+      });
+      
+      const entities = await this._hass.callWS({
+        type: "config/entity_registry/list"
+      });
+      
+      entities.forEach(entity => {
+        if (entity.device_id) {
+          entityRegistry[entity.entity_id] = entity.device_id;
+        }
+      });
+      
+    } catch (error) {
+      console.error("Failed to fetch registry data:", error);
+    }
 
     const sensorTypes = [
       "phase_a_current",
@@ -963,17 +1002,29 @@ class PdfGeneratorPanel extends HTMLElement {
         if (lower.endsWith(`_${type}`)) {
           const withoutSensor = entityId.substring("sensor.".length);
           const baseName = withoutSensor.substring(0, withoutSensor.length - (`_${type}`).length);
+          
+          const stateObj = this._hass.states[entityId];
+          const deviceId = entityRegistry[entityId];
+          const deviceInfo = deviceId ? deviceRegistry[deviceId] : null;
+          
           if (!breakers[baseName]) {
             breakers[baseName] = {
               types: new Set(),
-              friendlyName: null
+              friendlyName: null,
+              allEntities: {},
+              deviceId: deviceId,
+              deviceInfo: deviceInfo
             };
           }
           breakers[baseName].types.add(type);
+          breakers[baseName].allEntities[type] = {
+            entityId: entityId,
+            state: stateObj?.state,
+            attributes: stateObj?.attributes,
+            fullStateObj: stateObj
+          };
           
-          // Get friendly name from the entity (prefer total_energy sensor for the name)
           if (type === "total_energy" || !breakers[baseName].friendlyName) {
-            const stateObj = this._hass.states[entityId];
             if (stateObj?.attributes?.friendly_name) {
               breakers[baseName].friendlyName = stateObj.attributes.friendly_name;
             }
@@ -982,8 +1033,36 @@ class PdfGeneratorPanel extends HTMLElement {
       });
     });
     
+    //console.log(`Total breakers found: ${Object.keys(breakers).length}`);
+    
     const users = Object.entries(breakers).map(([baseName, data]) => {
-      if (!data.types.has("phase_a_current") || !data.types.has("total_energy")) return null;
+      //console.log(`\n--- Processing breaker: ${baseName} ---`);
+      
+      // Filter: Only include devices with model_id matching the pattern
+      if (!data.deviceInfo) {
+        //console.log("❌ SKIPPING - No device info");
+        return null;
+      }
+      
+      //console.log("Manufacturer:", data.deviceInfo.manufacturer);
+      //console.log("Model:", data.deviceInfo.model);
+      //console.log("Model ID:", data.deviceInfo.model_id);
+      
+      const isTuyaDevice = data.deviceInfo.manufacturer === "Tuya";
+      const hasCorrectModelId = data.deviceInfo.model_id === "vylye9wwllb1av7a";
+      
+      //console.log(`Is Tuya device: ${isTuyaDevice}`);
+      //console.log(`Has correct model_id: ${hasCorrectModelId}`);
+      
+      if (!isTuyaDevice || !hasCorrectModelId) {
+        //console.log("❌ SKIPPING - Not a Tuya device with model_id 'vylye9wwllb1av7a'");
+        return null;
+      }
+      
+      if (!data.types.has("phase_a_current") || !data.types.has("total_energy")) {
+        //console.log("❌ SKIPPING - Missing required sensors");
+        return null;
+      }
   
       const sensors = {};
       sensorTypes.forEach(type => {
@@ -992,17 +1071,25 @@ class PdfGeneratorPanel extends HTMLElement {
         }
       });
 
-      // Create display name
       const displayName = data.friendlyName 
         ? this._sanitizeDisplayName(data.friendlyName)
         : baseName;
 
-      return {
+      const userObj = {
         name: baseName,
         displayName: displayName,
-        sensors
+        sensors,
+        deviceId: data.deviceId,
+        deviceInfo: data.deviceInfo,
+        allEntities: data.allEntities
       };
+      
+      //console.log("✅ INCLUDED - Display Name:", displayName);
+      
+      return userObj;
     }).filter(u => u !== null);
+    
+    //console.log(`\n=== FINAL RESULT: ${users.length} users included ===\n`);
     
     return users;
   }
