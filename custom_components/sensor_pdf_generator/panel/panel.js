@@ -4,9 +4,11 @@ class PdfGeneratorPanel extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this.users = [];
     this.filteredUsers = [];
-    this.selectedUsers = new Set(); // Changed from selectedUser to selectedUsers Set
+    this.selectedUsers = new Set();
     this.selectedDateRange = null;
     this._initialized = false;
+    this.selectedStreet = "all"; // floor filter
+    this.selectedBuilding = "all"; // area filter
     
     this.shadowRoot.innerHTML = `
       <style>
@@ -402,6 +404,101 @@ class PdfGeneratorPanel extends HTMLElement {
           color: var(--text-primary);
         }
 
+        /* Filter Section */
+        .filter-section {
+          padding: 16px 24px;
+          border-bottom: 1px solid var(--border-color);
+          background: var(--bg-secondary);
+        }
+
+        .filter-group {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          margin-bottom: 12px;
+        }
+
+        .filter-group:last-child {
+          margin-bottom: 0;
+        }
+
+        .filter-label {
+          font-size: 12px;
+          font-weight: 500;
+          color: var(--text-secondary);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .filter-select {
+          width: 100%;
+          padding: 10px 12px;
+          border: 2px solid var(--border-color);
+          border-radius: 8px;
+          background: var(--bg-tertiary);
+          color: var(--text-primary);
+          font-size: 14px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .filter-select:focus {
+          outline: none;
+          border-color: var(--ha-primary-color);
+          background: var(--bg-secondary);
+          box-shadow: 0 0 0 4px rgba(248, 77, 68, 0.1);
+        }
+
+        .filter-select:hover {
+          border-color: var(--text-secondary);
+        }
+
+        .filter-summary {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 12px;
+          background: var(--bg-tertiary);
+          border-radius: 6px;
+          font-size: 13px;
+          color: var(--text-secondary);
+          margin-top: 8px;
+        }
+
+        .filter-summary-item {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+
+        .filter-badge {
+          background: var(--ha-primary-color);
+          color: white;
+          padding: 2px 8px;
+          border-radius: 10px;
+          font-weight: 600;
+          font-size: 11px;
+        }
+
+        .clear-filters-btn {
+          padding: 6px 12px;
+          background: transparent;
+          color: var(--text-secondary);
+          border: 1px solid var(--border-color);
+          border-radius: 6px;
+          font-size: 12px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s;
+          margin-left: auto;
+        }
+
+        .clear-filters-btn:hover {
+          background: var(--bg-tertiary);
+          color: var(--text-primary);
+        }
+
         /* Scrollbars */
         .user-list::-webkit-scrollbar,
         .main-content::-webkit-scrollbar {
@@ -574,6 +671,27 @@ class PdfGeneratorPanel extends HTMLElement {
           </div>
         </div>
         
+        <div class="filter-section">
+          <div class="filter-group">
+            <label class="filter-label">Building</label>
+            <select id="building-filter" class="filter-select">
+              <option value="all">All Buildings</option>
+            </select>
+          </div>
+          
+          <div class="filter-group">
+            <label class="filter-label">Street</label>
+            <select id="street-filter" class="filter-select">
+              <option value="all">All Streets</option>
+            </select>
+          </div>
+          
+          <div class="filter-summary">
+            <span id="filter-summary-text">Showing all users</span>
+            <button id="clear-filters" class="clear-filters-btn" style="display: none;">Clear Filters</button>
+          </div>
+        </div>
+        
         <div class="user-list-container">
           <ul id="user-list" class="user-list"></ul>
         </div>
@@ -657,6 +775,21 @@ class PdfGeneratorPanel extends HTMLElement {
     this.shadowRoot.getElementById("clear-selection").addEventListener("click", () => this._clearSelection());
     this.shadowRoot.getElementById("refresh-pdfs").addEventListener("click", () => this._loadPdfFiles());
     
+    // Filter event listeners
+    this.shadowRoot.getElementById("building-filter").addEventListener("change", (e) => {
+      this.selectedBuilding = e.target.value;
+      this._applyFilters();
+    });
+    
+    this.shadowRoot.getElementById("street-filter").addEventListener("change", (e) => {
+      this.selectedStreet = e.target.value;
+      this._applyFilters();
+    });
+    
+    this.shadowRoot.getElementById("clear-filters").addEventListener("click", () => {
+      this._clearFilters();
+    });
+    
     // Date picker event listeners
     const startDate = this.shadowRoot.getElementById("start-date");
     const endDate = this.shadowRoot.getElementById("end-date");
@@ -711,10 +844,10 @@ class PdfGeneratorPanel extends HTMLElement {
   }
 
   _initialize() {
-    // Make this async since _getUsersFromHass is now async
     this._getUsersFromHass().then(users => {
       this.users = users;
       this.filteredUsers = users;
+      this._populateFilterDropdowns(); // This will populate both filters
       this._renderUserList();
       this._updateSelectedUsersDisplay();
     });
@@ -948,13 +1081,40 @@ class PdfGeneratorPanel extends HTMLElement {
   async _getUsersFromHass() {
     if (!this._hass) return [];
 
-    // console.log("=== STARTING USER DISCOVERY ===");
+    console.log("=== STARTING USER DISCOVERY ===");
 
-    // Fetch device registry and entity registry
     let deviceRegistry = {};
     let entityRegistry = {};
+    let areaRegistry = {};
+    let floorRegistry = {};
     
     try {
+      // Fetch floors
+      const floors = await this._hass.callWS({
+        type: "config/floor_registry/list"
+      });
+      
+      floors.forEach(floor => {
+        floorRegistry[floor.floor_id] = floor.name;
+      });
+      
+      console.log("Floors found:", floorRegistry);
+      
+      // Fetch areas
+      const areas = await this._hass.callWS({
+        type: "config/area_registry/list"
+      });
+      
+      areas.forEach(area => {
+        areaRegistry[area.area_id] = {
+          name: area.name,
+          floor_id: area.floor_id  // Areas are assigned to floors
+        };
+      });
+      
+      console.log("Areas found:", areaRegistry);
+      
+      // Fetch devices
       const devices = await this._hass.callWS({
         type: "config/device_registry/list"
       });
@@ -966,17 +1126,22 @@ class PdfGeneratorPanel extends HTMLElement {
           name_by_user: device.name_by_user,
           manufacturer: device.manufacturer,
           model: device.model,
-          model_id: device.model_id
+          model_id: device.model_id,
+          area_id: device.area_id
         };
       });
       
+      // Fetch entities
       const entities = await this._hass.callWS({
         type: "config/entity_registry/list"
       });
       
       entities.forEach(entity => {
         if (entity.device_id) {
-          entityRegistry[entity.entity_id] = entity.device_id;
+          entityRegistry[entity.entity_id] = {
+            device_id: entity.device_id,
+            area_id: entity.area_id
+          };
         }
       });
       
@@ -1004,8 +1169,18 @@ class PdfGeneratorPanel extends HTMLElement {
           const baseName = withoutSensor.substring(0, withoutSensor.length - (`_${type}`).length);
           
           const stateObj = this._hass.states[entityId];
-          const deviceId = entityRegistry[entityId];
+          const entityInfo = entityRegistry[entityId];
+          const deviceId = entityInfo?.device_id;
           const deviceInfo = deviceId ? deviceRegistry[deviceId] : null;
+          
+          // Get area from entity or device
+          const areaId = entityInfo?.area_id || deviceInfo?.area_id;
+          const areaInfo = areaId ? areaRegistry[areaId] : null;
+          const areaName = areaInfo?.name || null;
+          
+          // Get floor from area (areas are assigned to floors)
+          const floorId = areaInfo?.floor_id;
+          const floorName = floorId ? floorRegistry[floorId] : null;
           
           if (!breakers[baseName]) {
             breakers[baseName] = {
@@ -1013,7 +1188,11 @@ class PdfGeneratorPanel extends HTMLElement {
               friendlyName: null,
               allEntities: {},
               deviceId: deviceId,
-              deviceInfo: deviceInfo
+              deviceInfo: deviceInfo,
+              area: areaName,
+              floor: floorName,
+              areaId: areaId,
+              floorId: floorId
             };
           }
           breakers[baseName].types.add(type);
@@ -1033,34 +1212,26 @@ class PdfGeneratorPanel extends HTMLElement {
       });
     });
     
-    //console.log(`Total breakers found: ${Object.keys(breakers).length}`);
+    console.log(`Total breakers found: ${Object.keys(breakers).length}`);
     
     const users = Object.entries(breakers).map(([baseName, data]) => {
-      //console.log(`\n--- Processing breaker: ${baseName} ---`);
+      console.log(`\n--- Processing breaker: ${baseName} ---`);
       
-      // Filter: Only include devices with model_id matching the pattern
       if (!data.deviceInfo) {
-        //console.log("❌ SKIPPING - No device info");
+        console.log("❌ SKIPPING - No device info");
         return null;
       }
-      
-      //console.log("Manufacturer:", data.deviceInfo.manufacturer);
-      //console.log("Model:", data.deviceInfo.model);
-      //console.log("Model ID:", data.deviceInfo.model_id);
       
       const isTuyaDevice = data.deviceInfo.manufacturer === "Tuya";
       const hasCorrectModelId = data.deviceInfo.model_id === "vylye9wwllb1av7a";
       
-      //console.log(`Is Tuya device: ${isTuyaDevice}`);
-      //console.log(`Has correct model_id: ${hasCorrectModelId}`);
-      
       if (!isTuyaDevice || !hasCorrectModelId) {
-        //console.log("❌ SKIPPING - Not a Tuya device with model_id 'vylye9wwllb1av7a'");
+        console.log("❌ SKIPPING - Not a Tuya device with model_id 'vylye9wwllb1av7a'");
         return null;
       }
       
       if (!data.types.has("phase_a_current") || !data.types.has("total_energy")) {
-        //console.log("❌ SKIPPING - Missing required sensors");
+        console.log("❌ SKIPPING - Missing required sensors");
         return null;
       }
   
@@ -1081,15 +1252,19 @@ class PdfGeneratorPanel extends HTMLElement {
         sensors,
         deviceId: data.deviceId,
         deviceInfo: data.deviceInfo,
-        allEntities: data.allEntities
+        allEntities: data.allEntities,
+        building: data.area || "Unassigned", // area -> building
+        street: data.floor || "Unassigned", // floor (from area) -> street
+        areaId: data.areaId,
+        floorId: data.floorId
       };
       
-      //console.log("✅ INCLUDED - Display Name:", displayName);
+      console.log("✅ INCLUDED - Display Name:", displayName, "| Building (Area):", userObj.building, "| Street (Floor):", userObj.street);
       
       return userObj;
     }).filter(u => u !== null);
     
-    //console.log(`\n=== FINAL RESULT: ${users.length} users included ===\n`);
+    console.log(`\n=== FINAL RESULT: ${users.length} users included ===\n`);
     
     return users;
   }
@@ -1533,6 +1708,136 @@ class PdfGeneratorPanel extends HTMLElement {
       endString: today.toISOString().split('T')[0]
     };
   }
+    async _populateFilterDropdowns() {
+    const buildingFilter = this.shadowRoot.getElementById("building-filter");
+    
+    // Get unique buildings from users
+    const buildings = new Set();
+    
+    this.users.forEach(user => {
+      buildings.add(user.building);
+    });
+    
+    // Clear existing options (except "All")
+    buildingFilter.innerHTML = '<option value="all">All Buildings</option>';
+    
+    // Add building options (sorted)
+    Array.from(buildings).sort().forEach(building => {
+      const option = document.createElement("option");
+      option.value = building;
+      option.textContent = building;
+      buildingFilter.appendChild(option);
+    });
+    
+    // Get ALL streets from Home Assistant floor registry (not just from users)
+    await this._populateAllStreets();
+  }
+
+  async _populateAllStreets() {
+    const streetFilter = this.shadowRoot.getElementById("street-filter");
+    
+    try {
+      // Fetch all floors from Home Assistant
+      const floors = await this._hass.callWS({
+        type: "config/floor_registry/list"
+      });
+      
+      console.log("All floors/streets found:", floors);
+      
+      // Clear and add all floors as streets
+      streetFilter.innerHTML = '<option value="all">All Streets</option>';
+      
+      // Sort floors by name and add them
+      floors
+        .map(floor => floor.name)
+        .sort()
+        .forEach(floorName => {
+          const option = document.createElement("option");
+          option.value = floorName;
+          option.textContent = floorName;
+          streetFilter.appendChild(option);
+        });
+      
+      console.log("Streets populated successfully");
+        
+    } catch (error) {
+      console.error("Failed to fetch floors:", error);
+      
+      // Fallback: just show Unassigned if fetching fails
+      streetFilter.innerHTML = '<option value="all">All Streets</option>';
+      const option = document.createElement("option");
+      option.value = "Unassigned";
+      option.textContent = "Unassigned";
+      streetFilter.appendChild(option);
+    }
+  }
+
+  _applyFilters() {
+    const searchQuery = this.shadowRoot.getElementById("search").value;
+    this._filterUsers(searchQuery);
+    this._updateFilterSummary();
+  }
+
+  _filterUsers(query = "") {
+    query = query.toLowerCase().trim();
+    
+    this.filteredUsers = this.users.filter(u => {
+      // Text search
+      const matchesSearch = !query || 
+        u.name.toLowerCase().includes(query) || 
+        u.displayName.toLowerCase().includes(query);
+      
+      // Building filter
+      const matchesBuilding = this.selectedBuilding === "all" || 
+        u.building === this.selectedBuilding;
+      
+      // Street filter
+      const matchesStreet = this.selectedStreet === "all" || 
+        u.street === this.selectedStreet;
+      
+      return matchesSearch && matchesBuilding && matchesStreet;
+    });
+    
+    this._renderUserList();
+    this._updateFilterSummary();
+  }
+
+  _updateFilterSummary() {
+    const summaryText = this.shadowRoot.getElementById("filter-summary-text");
+    const clearBtn = this.shadowRoot.getElementById("clear-filters");
+    
+    const hasFilters = this.selectedBuilding !== "all" || this.selectedStreet !== "all";
+    
+    if (!hasFilters) {
+      summaryText.innerHTML = `Showing all ${this.filteredUsers.length} users`;
+      clearBtn.style.display = "none";
+    } else {
+      let filterParts = [];
+      
+      if (this.selectedBuilding !== "all") {
+        filterParts.push(`<span class="filter-badge">${this.selectedBuilding}</span>`);
+      }
+      
+      if (this.selectedStreet !== "all") {
+        filterParts.push(`<span class="filter-badge">${this.selectedStreet}</span>`);
+      }
+      
+      summaryText.innerHTML = `Filtered: ${filterParts.join(" • ")} (${this.filteredUsers.length} users)`;
+      clearBtn.style.display = "block";
+    }
+  }
+
+  _clearFilters() {
+    this.selectedBuilding = "all";
+    this.selectedStreet = "all";
+    
+    this.shadowRoot.getElementById("building-filter").value = "all";
+    this.shadowRoot.getElementById("street-filter").value = "all";
+    this.shadowRoot.getElementById("search").value = "";
+    
+    this._applyFilters();
+  }
+
 }
 
 customElements.define("pdf-generator-panel", PdfGeneratorPanel);
