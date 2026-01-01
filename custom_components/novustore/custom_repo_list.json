@@ -1,0 +1,19 @@
+{
+  "integration": {
+    "1031864969": {
+      "full_name": "hewhoshallneverbenamed/novustesting",
+      "description": "PDF Generator Integration",
+      "category": "integration",
+      "remote_branch": "main",
+      "downloads": 0,
+      "last_updated": "2025-08-11T00:00:00Z",
+      "open_issues": 0,
+      "stargazers_count": 0,
+      "topics": [
+        "pdf",
+        "generator"
+      ],
+      "last_fetched": 1754900000
+    }
+  }
+}
